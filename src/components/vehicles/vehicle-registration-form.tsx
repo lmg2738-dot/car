@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Input, Select, FormField } from "@/components/ui/input";
 import { readJsonResponse } from "@/lib/api/client";
+import { StorageHealthBanner } from "@/components/storage/storage-health-banner";
 
 export function VehicleRegistrationForm() {
   const router = useRouter();
@@ -52,6 +53,8 @@ export function VehicleRegistrationForm() {
   }
 
   return (
+  <>
+    <StorageHealthBanner />
     <Card variant="elevated">
       <CardHeader
         icon={<Car className="h-5 w-5" />}
@@ -128,5 +131,6 @@ export function VehicleRegistrationForm() {
         </div>
       </form>
     </Card>
+  </>
   );
 }

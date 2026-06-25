@@ -12,7 +12,10 @@ export type StoreData = {
 const BLOB_STORE_KEY = "autodealer/store.json";
 
 export function isBlobStorageEnabled(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  if (process.env.FORCE_FILE_STORAGE === "true") return false;
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) return true;
+  // Vercel: @vercel/blob SDK가 OIDC(VERCEL_OIDC_TOKEN)로 자동 인증
+  return isServerlessEnv();
 }
 
 export function defaultStore(): StoreData {
@@ -59,6 +62,12 @@ export async function readStoreData(): Promise<StoreData> {
       return (await res.json()) as StoreData;
     } catch (err) {
       console.error("[storage] blob read failed", err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("No token found") || message.includes("BLOB")) {
+        throw new Error(
+          "Vercel Blob이 연결되지 않았습니다. Vercel 대시보드 → Storage → Create Blob Store → 프로젝트 연결 후 재배포하세요."
+        );
+      }
       throw new Error(
         "Vercel Blob 저장소 읽기에 실패했습니다. Storage → Blob을 프로젝트에 연결했는지 확인하세요."
       );
@@ -135,8 +144,8 @@ export async function readPhotoBuffer(
 }
 
 export function getStorageHint(): string | null {
-  if (isServerlessEnv() && !isBlobStorageEnabled()) {
-    return "Vercel에서는 Storage → Blob Store를 생성해 프로젝트에 연결한 뒤 재배포하세요.";
+  if (isServerlessEnv() && !process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN) {
+    return "Vercel Storage → Blob Store를 생성해 프로젝트에 연결한 뒤 재배포하세요.";
   }
   return null;
 }
