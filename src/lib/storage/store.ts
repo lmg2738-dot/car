@@ -8,10 +8,21 @@ import type {
   VehiclePhoto,
   VehicleStatus,
 } from "@/types/database";
+import { getWritableDataRoot } from "@/lib/runtime";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const STORE_PATH = path.join(DATA_DIR, "store.json");
-export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+function getDataDir() {
+  return getWritableDataRoot();
+}
+
+function getStorePath() {
+  return path.join(getDataDir(), "store.json");
+}
+
+function getUploadsRoot() {
+  return path.join(getDataDir(), "uploads");
+}
+
+export const UPLOADS_DIR = getUploadsRoot();
 
 type StoreData = {
   vehicles: Vehicle[];
@@ -26,8 +37,13 @@ function defaultStore(): StoreData {
 }
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  const dataDir = getDataDir();
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const uploadsDir = getUploadsRoot();
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
   }
 }
 
@@ -35,21 +51,22 @@ function loadStore(): StoreData {
   if (storeCache) return storeCache;
 
   ensureDataDir();
-  if (!fs.existsSync(STORE_PATH)) {
+  const storePath = getStorePath();
+  if (!fs.existsSync(storePath)) {
     storeCache = defaultStore();
     persistStore(storeCache);
     return storeCache;
   }
 
   storeCache = JSON.parse(
-    fs.readFileSync(STORE_PATH, "utf-8")
+    fs.readFileSync(storePath, "utf-8")
   ) as StoreData;
   return storeCache;
 }
 
 function persistStore(store: StoreData) {
   ensureDataDir();
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store), "utf-8");
+  fs.writeFileSync(getStorePath(), JSON.stringify(store), "utf-8");
   storeCache = store;
 }
 
@@ -91,7 +108,7 @@ function attachVehicleRelations(
 }
 
 export function getUploadsDir(vehicleId: string) {
-  const dir = path.join(UPLOADS_DIR, vehicleId);
+  const dir = path.join(getUploadsRoot(), vehicleId);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -197,7 +214,7 @@ export function deleteVehicle(id: string) {
     );
   });
 
-  const uploadDir = path.join(UPLOADS_DIR, id);
+  const uploadDir = path.join(getUploadsRoot(), id);
   if (fs.existsSync(uploadDir)) {
     fs.rmSync(uploadDir, { recursive: true, force: true });
   }

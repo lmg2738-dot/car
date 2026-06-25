@@ -6,6 +6,7 @@ import type {
   AihubDownloadResponse,
   AihubListMode,
 } from "./types";
+import { isServerlessEnv } from "@/lib/runtime";
 
 const AIHUB_SHELL_URL = "https://api.aihub.or.kr/api/aihubshell.do";
 
@@ -17,15 +18,6 @@ function getApiKey(): string {
     );
   }
   return key;
-}
-
-/** Vercel/Lambda 등 쓰기 가능 경로가 /tmp 뿐인 환경 */
-export function isServerlessEnv(): boolean {
-  return (
-    process.env.VERCEL === "1" ||
-    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
-    process.cwd().startsWith("/var/task")
-  );
 }
 
 function getBinDir(): string {

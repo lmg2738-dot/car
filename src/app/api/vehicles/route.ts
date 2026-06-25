@@ -4,14 +4,15 @@ import {
   jsonSuccess,
   readJsonBody,
   vehicleInputSchema,
+  withApiRoute,
 } from "@/lib/api/helpers";
 import { createVehicle, listVehicles } from "@/lib/storage/store";
 
-export async function GET() {
+export const GET = withApiRoute(async () => {
   return jsonSuccess(listVehicles());
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withApiRoute(async (request: NextRequest) => {
   const body = await readJsonBody(request);
   if (body === null) {
     return jsonError("잘못된 JSON 요청입니다.");
@@ -24,4 +25,4 @@ export async function POST(request: NextRequest) {
 
   const vehicle = createVehicle(parsed.data);
   return jsonSuccess(vehicle, 201);
-}
+});
