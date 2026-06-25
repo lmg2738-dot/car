@@ -13,7 +13,7 @@
 | 변수 | 필수 | 설명 |
 |------|------|------|
 | `OPENROUTER_API_KEY` | ✅ | OpenRouter API 키 |
-| `NEXT_PUBLIC_APP_URL` | ✅ | 배포된 공개 URL (예: `https://xxx.onrender.com`) |
+| `NEXT_PUBLIC_APP_URL` | ✅ | 배포된 공개 URL |
 | `ANALYZE_FALLBACK_MOCK` | 권장 | OpenRouter 실패 시 데모 분석 (기본 `true`) |
 | `ANALYZE_MOCK_MODE` | 선택 | 항상 데모 분석 (`true`/`false`) |
 | `AIHUB_API_KEY` | 선택 | AI Hub 데이터 다운로드 |
@@ -22,41 +22,17 @@
 
 ---
 
-## 2. Render 배포 (무료 Blueprint)
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/lmg2738-dot/car)
-
-1. 위 버튼 클릭 → GitHub `lmg2738-dot/car` 연동
-2. Blueprint(`render.yaml`) 확인 → **Apply**
-3. 배포 시 입력할 환경 변수:
-   - `OPENROUTER_API_KEY` — OpenRouter 키
-   - `AIHUB_API_KEY` — AI Hub 키 (다운로드용)
-   - `NEXT_PUBLIC_APP_URL` — 배포 완료 후 URL (예: `https://autodealer-copilot.onrender.com`)
-4. Deploy 완료 후 `/dashboard/datasets`에서 AI Hub 조회·다운로드 테스트
-
-### 무료 플랜 제한 (중요)
-
-| 항목 | 무료 플랜 |
-|------|-----------|
-| AI Hub **다운로드** | ✅ 서비스 가동 중 가능 (`/app/data/aihub`) |
-| 데이터 **영구 저장** | ❌ 재배포·슬립 후 초기화 (영구 디스크는 유료) |
-| 유휴 슬립 | 15분 미사용 시 슬립 → 첫 접속 30초~1분 |
-| RAM | 512 MB (초대형 데이터셋은 실패할 수 있음) |
-
-> 영구 디스크가 필요하면 Render **Starter** 이상으로 업그레이드 후 Disks 탭에서 `/app/data` 마운트
-
----
-
-## 3. Vercel 배포 (빠른 데모)
+## 2. Vercel 배포 (빠른 데모)
 
 Vercel은 **파일 저장소가 영구적이지 않습니다** (재배포·콜드스타트 시 데이터 초기화).
-UI·API 동작 확인용으로만 권장합니다.
+UI·API 동작 확인용으로 권장합니다. AI Hub **조회**는 가능하나, **대용량 다운로드**는 Docker 배포를 사용하세요.
 
 1. [Vercel](https://vercel.com) → Import Git Repository → `lmg2738-dot/car`
 2. Environment Variables:
    - `OPENROUTER_API_KEY`
    - `NEXT_PUBLIC_APP_URL` = Vercel 배포 URL
    - `ANALYZE_FALLBACK_MOCK` = `true`
+   - `AIHUB_API_KEY` (AI Hub 사용 시)
 3. Deploy
 
 GitHub Actions 자동 배포 (선택):
@@ -66,7 +42,9 @@ GitHub Actions 자동 배포 (선택):
 
 ---
 
-## 4. Docker (VPS / 자체 서버)
+## 3. Docker (운영 권장)
+
+`data/` 폴더 영구 저장 및 AI Hub **대용량 다운로드**가 필요하면 Docker를 사용하세요.
 
 ```bash
 # .env.local 준비 후
@@ -86,12 +64,27 @@ docker run -d -p 50006:50006 \
 
 ---
 
-## 5. 로컬 운영 모드
+## 4. 로컬 운영 모드
 
 ```bash
 npm run build
 npm run start
 ```
+
+---
+
+## 5. AI Hub (선택)
+
+로컬 / Docker:
+
+```bash
+npm run aihub:setup
+```
+
+Vercel 배포 시 `vercel-build` 스크립트가 aihubshell을 설치하며, 없을 경우 런타임에 `/tmp`에 자동 다운로드합니다.
+**대용량 데이터 다운로드**는 Docker 배포에서 사용하세요.
+
+Windows: WSL 또는 Git Bash 권장 (`AIHUB_BASH_PATH` 설정 가능)
 
 ---
 

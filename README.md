@@ -53,6 +53,7 @@ npm run dev
 
 ## 배포
 
-**운영(무료):** [Render Blueprint 배포](https://render.com/deploy?repo=https://github.com/lmg2738-dot/car) — AI Hub 다운로드 지원 ([DEPLOYMENT.md](./DEPLOYMENT.md))
+Vercel 배포 시 `OPENROUTER_API_KEY` 환경 변수만 설정하면 됩니다.
+로컬 `data/` 폴더는 서버리스에서 유지되지 않으므로, 프로덕션·AI Hub 대용량 다운로드는 Docker를 권장합니다.
 
-**빠른 데모:** Vercel Import (데이터는 재배포 시 초기화됨)
+자세한 내용: [DEPLOYMENT.md](./DEPLOYMENT.md)
