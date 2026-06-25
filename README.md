@@ -53,7 +53,6 @@ npm run dev
 
 ## 배포
 
-Vercel 배포 시 `OPENROUTER_API_KEY` 환경 변수만 설정하면 됩니다.
-로컬 `data/` 폴더는 서버리스에서 유지되지 않으므로, 프로덕션에서는 볼륨 마운트 VM 또는 Docker 권장.
+**운영(데이터 영구 저장):** [Render Blueprint](./render.yaml) 또는 Docker — [DEPLOYMENT.md](./DEPLOYMENT.md)
 
-자세한 내용: [DEPLOYMENT.md](./DEPLOYMENT.md)
+**빠른 데모:** Vercel Import (데이터는 재배포 시 초기화됨)

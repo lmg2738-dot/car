@@ -17,6 +17,23 @@ export async function readJsonBody(request: NextRequest) {
   }
 }
 
+/** 라우트 핸들러 밖에서 터진 예외도 항상 JSON으로 반환 */
+export function withApiRoute(
+  handler: (request: NextRequest) => Promise<NextResponse>
+) {
+  return async (request: NextRequest) => {
+    try {
+      return await handler(request);
+    } catch (err) {
+      console.error("[API]", err);
+      return jsonError(
+        err instanceof Error ? err.message : "서버 내부 오류가 발생했습니다.",
+        500
+      );
+    }
+  };
+}
+
 export const vehicleInputSchema = z.object({
   brand: z.string().max(50).optional(),
   model: z.string().min(1).max(100),

@@ -13,7 +13,7 @@ import {
   type AdStyle,
   type GeneratedAd,
 } from "@/types/database";
-import { readJsonResponse } from "@/lib/api/client";
+import { readJsonResponse, safeRouterRefresh } from "@/lib/api/client";
 
 type Props = {
   vehicleId: string;
@@ -46,7 +46,7 @@ export function GenerateListingForm({ vehicleId, isAnalyzed }: Props) {
       }
 
       setGenerated(data);
-      router.refresh();
+      await safeRouterRefresh(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "생성에 실패했습니다.");
     } finally {

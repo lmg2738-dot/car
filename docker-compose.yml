@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "50006:50006"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      - PORT=50006
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  app-data:

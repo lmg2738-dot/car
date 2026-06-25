@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "regions": ["icn1"],
+  "functions": {
+    "src/app/api/car/analyze/route.ts": {
+      "maxDuration": 120
+    },
+    "src/app/api/car/generate/route.ts": {
+      "maxDuration": 120
+    }
+  }
+}

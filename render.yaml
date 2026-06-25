@@ -1,0 +1,32 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# GitHub 연동 후 "New Blueprint" → 이 저장소 선택
+
+services:
+  - type: web
+    name: autodealer-copilot
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "50006"
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: ANALYZE_FALLBACK_MOCK
+        value: "true"
+      - key: OPENROUTER_MAX_MODEL_ATTEMPTS
+        value: "2"
+      - key: AIHUB_API_KEY
+        sync: false
+    disk:
+      name: autodealer-data
+      mountPath: /app/data
+      sizeGB: 1

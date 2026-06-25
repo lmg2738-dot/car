@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { ConditionSummary, MarketPrice } from "@/types/database";
 import { formatCurrency } from "@/lib/utils";
-import { readJsonResponse } from "@/lib/api/client";
+import { readJsonResponse, safeRouterRefresh } from "@/lib/api/client";
 
 type Props = {
   vehicleId: string;
@@ -27,6 +27,7 @@ export function AnalyzePanel({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [result, setResult] = useState<{
     condition_summary: ConditionSummary;
     market_price: MarketPrice;
@@ -48,22 +49,29 @@ export function AnalyzePanel({
   async function handleAnalyze() {
     setLoading(true);
     setError(null);
+    setWarning(null);
 
     try {
       const res = await fetch("/api/car/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vehicle_id: vehicleId }),
+        cache: "no-store",
       });
 
-      const data = await readJsonResponse<{ error?: string; analysis?: typeof result }>(res);
+      const data = await readJsonResponse<{
+        error?: string;
+        analysis?: typeof result;
+        warning?: string;
+      }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "분석에 실패했습니다.");
       }
 
       setResult(data.analysis ?? null);
-      router.refresh();
+      setWarning(data.warning ?? null);
+      await safeRouterRefresh(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "분석에 실패했습니다.");
     } finally {
@@ -95,6 +103,12 @@ export function AnalyzePanel({
         <div className="flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
           <AlertCircle className="h-4 w-4 shrink-0" />
           사진을 먼저 업로드해주세요.
+        </div>
+      )}
+
+      {warning && (
+        <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+          {warning}
         </div>
       )}
 
