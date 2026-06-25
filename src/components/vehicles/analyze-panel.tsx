@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Brain, TrendingUp, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ export function AnalyzePanel({
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
+  const [quotaNote, setQuotaNote] = useState<string | null>(null);
+  const [quotaExhausted, setQuotaExhausted] = useState(false);
   const [result, setResult] = useState<{
     condition_summary: ConditionSummary;
     market_price: MarketPrice;
@@ -46,6 +48,40 @@ export function AnalyzePanel({
         }
       : null
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/models", { cache: "no-store" });
+        const data = await readJsonResponse<{
+          quota?: {
+            limit_remaining: number | null;
+            usage_daily: number;
+            free_models_note: string;
+          };
+        }>(res);
+        if (cancelled || !data.quota) return;
+
+        const remaining = data.quota.limit_remaining;
+        if (remaining === 0) {
+          setQuotaExhausted(true);
+          setQuotaNote(
+            "오늘 OpenRouter 무료 호출 한도를 모두 사용했습니다. 한국 시간 오전 9시(UTC 자정) 이후 다시 시도하세요."
+          );
+        } else if (remaining !== null) {
+          setQuotaNote(`오늘 남은 무료 호출: 약 ${remaining}회`);
+        } else {
+          setQuotaNote(data.quota.free_models_note);
+        }
+      } catch {
+        if (!cancelled) setQuotaNote(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleAnalyze() {
     setLoading(true);
@@ -96,7 +132,7 @@ export function AnalyzePanel({
           <Button
             onClick={handleAnalyze}
             loading={loading}
-            disabled={!hasPhotos}
+            disabled={!hasPhotos || quotaExhausted}
             variant="accent"
             size="sm"
           >
@@ -110,6 +146,18 @@ export function AnalyzePanel({
         <div className="flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
           <AlertCircle className="h-4 w-4 shrink-0" />
           사진을 먼저 업로드해주세요.
+        </div>
+      )}
+
+      {quotaNote && (
+        <div
+          className={`mb-4 rounded-xl px-4 py-3 text-sm ring-1 ${
+            quotaExhausted
+              ? "bg-amber-50 text-amber-900 ring-amber-200"
+              : "bg-muted/50 text-muted-foreground ring-border"
+          }`}
+        >
+          {quotaNote}
         </div>
       )}
 

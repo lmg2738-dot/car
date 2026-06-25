@@ -1,10 +1,11 @@
 import {
   blacklistModel,
-  FREE_QUOTA_EXCEEDED_MESSAGE,
+  createFreeQuotaExceededError,
   getFreeAnalysisModels,
   getApiKey,
   invalidateModelsCache,
   isFreeQuotaExceededError,
+  isFreeQuotaMessage,
   isModelUnavailableError,
   isRetryableError,
   OPENROUTER_API,
@@ -106,6 +107,7 @@ async function tryFreeModels(
   options: ChatOptions
 ): Promise<ChatResult | null> {
   const errors: string[] = [];
+  let quotaHits = 0;
 
   for (const model of models) {
     try {
@@ -123,6 +125,11 @@ async function tryFreeModels(
 
       if (isFreeQuotaExceededError(err)) {
         blacklistModel(model.id, "무료 한도");
+        quotaHits += 1;
+        // 계정 전체 일일 한도 — 추가 모델 시도 불필요
+        if (quotaHits >= 1) {
+          throw createFreeQuotaExceededError();
+        }
         continue;
       }
 
@@ -153,7 +160,7 @@ async function tryFreeModels(
           errors.push(retryMsg);
           if (isFreeQuotaExceededError(retryErr)) {
             blacklistModel(model.id, "무료 한도");
-            continue;
+            throw createFreeQuotaExceededError();
           }
           if (isModelUnavailableError(retryErr)) {
             blacklistModel(model.id, retryMsg);
@@ -166,53 +173,51 @@ async function tryFreeModels(
 
   if (
     errors.length > 0 &&
-    errors.every((e) => isFreeQuotaExceededError(new Error(e)))
+    errors.every((e) => isFreeQuotaMessage(e))
   ) {
-    const quotaErr = new Error(FREE_QUOTA_EXCEEDED_MESSAGE);
-    (quotaErr as Error & { code?: string }).code = "FREE_QUOTA_EXCEEDED";
-    throw quotaErr;
+    throw createFreeQuotaExceededError();
   }
 
   if (errors.length > 0) {
     throw new Error(
-      `무료 모델 시도 실패:\n${errors.slice(0, 5).join("\n")}`
+      `무료 모델 시도 실패. 잠시 후 다시 시도하세요.\n${errors.slice(0, 2).join("\n")}`
     );
   }
 
   return null;
 }
 
-/** 무료 모델만 순차 시도 (목록 재조회 후 2차 재시도 포함) */
+/** 무료 모델만 순차 시도 */
 export async function chatWithModels(
   options: ChatOptions
 ): Promise<ChatResult> {
-  for (let pass = 0; pass < 2; pass++) {
-    if (pass > 0) {
-      invalidateModelsCache();
-      console.warn("[OpenRouter] 무료 모델 목록 재조회 후 재시도");
-    }
+  const models = await getFreeAnalysisModels({
+    vision: options.requireVision,
+  });
 
-    const models = await getFreeAnalysisModels({
-      vision: options.requireVision,
-    });
-
-    if (models.length === 0) {
-      throw new Error(
-        options.requireVision
-          ? "사용 가능한 무료 Vision 모델이 없습니다. /api/models 에서 목록을 확인하세요."
-          : "사용 가능한 무료 모델이 없습니다."
-      );
-    }
-
-    try {
-      const result = await tryFreeModels(models, options);
-      if (result) return result;
-    } catch (err) {
-      if (pass === 1 || isFreeQuotaExceededError(err)) throw err;
-    }
+  if (models.length === 0) {
+    throw new Error(
+      options.requireVision
+        ? "사용 가능한 무료 Vision 모델이 없습니다. /api/models 에서 목록을 확인하세요."
+        : "사용 가능한 무료 모델이 없습니다."
+    );
   }
 
-  throw new Error(FREE_QUOTA_EXCEEDED_MESSAGE);
+  try {
+    const result = await tryFreeModels(models, options);
+    if (result) return result;
+  } catch (err) {
+    if (isFreeQuotaExceededError(err)) throw err;
+  }
+
+  invalidateModelsCache();
+  const retryModels = await getFreeAnalysisModels({
+    vision: options.requireVision,
+  });
+  const result = await tryFreeModels(retryModels, options);
+  if (result) return result;
+
+  throw createFreeQuotaExceededError();
 }
 
 /** @deprecated chatWithModels 사용 */

@@ -95,14 +95,52 @@ export function isModelUnavailableError(error: unknown): boolean {
 }
 
 export function isFreeQuotaExceededError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message.toLowerCase() : "";
+  if ((error as Error & { code?: string })?.code === "FREE_QUOTA_EXCEEDED") {
+    return true;
+  }
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return (
     msg.includes("free-models-per-day") ||
     msg.includes("free model requests per day") ||
+    msg.includes("add 10 credits to unlock") ||
     msg.includes("free model rate limit") ||
-    (msg.includes("rate limit") && msg.includes("free")) ||
-    (msg.includes("429") && msg.includes("free"))
+    msg.includes("무료 모델 일일 한도") ||
+    (msg.includes("rate limit") &&
+      (msg.includes("free") || msg.includes("free-model")))
   );
+}
+
+export function isFreeQuotaMessage(text: string): boolean {
+  return isFreeQuotaExceededError(new Error(text));
+}
+
+export function getFreeQuotaResetHint(): string {
+  return "한도는 매일 UTC 00:00(한국 시간 오전 9시)에 초기화됩니다.";
+}
+
+export const FREE_QUOTA_EXCEEDED_MESSAGE = [
+  "OpenRouter 무료 모델 일일 한도(계정 전체)를 모두 사용했습니다.",
+  "다른 무료 모델로 바꿔도 오늘은 동일하게 실패합니다.",
+  getFreeQuotaResetHint(),
+  "남은 한도: openrouter.ai/activity",
+].join(" ");
+
+export function createFreeQuotaExceededError(): Error {
+  const err = new Error(FREE_QUOTA_EXCEEDED_MESSAGE);
+  (err as Error & { code?: string }).code = "FREE_QUOTA_EXCEEDED";
+  return err;
+}
+
+export async function assertFreeQuotaAvailable(): Promise<void> {
+  try {
+    const info = await fetchKeyInfo();
+    if (info.limit_remaining === 0) {
+      throw createFreeQuotaExceededError();
+    }
+  } catch (err) {
+    if (isFreeQuotaExceededError(err)) throw err;
+    // 키 정보 API 실패 시 분석 시도는 계속
+  }
 }
 
 export function isRetryableError(error: unknown): boolean {
@@ -114,9 +152,6 @@ export function isRetryableError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message.toLowerCase() : "";
   return msg.includes("rate limit") || msg.includes("timeout");
 }
-
-export const FREE_QUOTA_EXCEEDED_MESSAGE =
-  "OpenRouter 무료 모델 일일 한도에 도달했습니다. UTC 자정 이후 다시 시도하거나 openrouter.ai/activity 에서 남은 한도를 확인하세요.";
 
 export type OpenRouterKeyInfo = {
   is_free_tier: boolean;

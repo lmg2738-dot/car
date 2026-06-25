@@ -10,6 +10,7 @@ import {
   withApiRoute,
 } from "@/lib/api/helpers";
 import { analyzeVehicle } from "@/lib/openrouter/vehicle-ai";
+import { assertFreeQuotaAvailable } from "@/lib/openrouter/models";
 import {
   isAnalyzeFallbackMockEnabled,
   isMockAnalyzeEnabled,
@@ -119,6 +120,13 @@ export const POST = withApiRoute(async (request: NextRequest) => {
   }
 
   const photos = vehicle.vehicle_photos ?? [];
+
+  try {
+    await assertFreeQuotaAvailable();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "무료 한도 초과";
+    return jsonError(message, 429);
+  }
 
   await updateVehicle(vehicle_id, { status: "analyzing" });
 
