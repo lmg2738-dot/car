@@ -13,6 +13,7 @@ import {
   type AdStyle,
   type GeneratedAd,
 } from "@/types/database";
+import { readJsonResponse } from "@/lib/api/client";
 
 type Props = {
   vehicleId: string;
@@ -38,7 +39,7 @@ export function GenerateListingForm({ vehicleId, isAnalyzed }: Props) {
         body: JSON.stringify({ vehicle_id: vehicleId, platform, style }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<GeneratedAd & { error?: string }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "생성에 실패했습니다.");

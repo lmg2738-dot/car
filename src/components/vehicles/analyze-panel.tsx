@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { ConditionSummary, MarketPrice } from "@/types/database";
 import { formatCurrency } from "@/lib/utils";
+import { readJsonResponse } from "@/lib/api/client";
 
 type Props = {
   vehicleId: string;
@@ -55,13 +56,13 @@ export function AnalyzePanel({
         body: JSON.stringify({ vehicle_id: vehicleId }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ error?: string; analysis?: typeof result }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "분석에 실패했습니다.");
       }
 
-      setResult(data.analysis);
+      setResult(data.analysis ?? null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "분석에 실패했습니다.");

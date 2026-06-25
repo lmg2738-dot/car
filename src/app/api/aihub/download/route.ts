@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { jsonError, jsonSuccess } from "@/lib/api/helpers";
+import { jsonError, jsonSuccess, readJsonBody } from "@/lib/api/helpers";
 import {
   downloadDataset,
   downloadPackage,
@@ -14,7 +14,10 @@ const downloadSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return jsonError("잘못된 JSON 요청입니다.");
+  }
   const parsed = downloadSchema.safeParse(body);
 
   if (!parsed.success) {

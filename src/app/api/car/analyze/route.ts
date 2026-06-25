@@ -5,6 +5,7 @@ import {
   analyzeSchema,
   jsonError,
   jsonSuccess,
+  readJsonBody,
 } from "@/lib/api/helpers";
 import { analyzeVehicle } from "@/lib/openrouter/vehicle-ai";
 import { isMockAnalyzeEnabled, mockAnalyzeVehicle } from "@/lib/openrouter/mock-analysis";
@@ -15,8 +16,13 @@ import {
   updateVehicle,
 } from "@/lib/storage/store";
 
+export const maxDuration = 120;
+
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return jsonError("잘못된 JSON 요청입니다.");
+  }
   const parsed = analyzeSchema.safeParse(body);
 
   if (!parsed.success) {

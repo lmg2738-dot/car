@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import {
   jsonError,
   jsonSuccess,
+  readJsonBody,
   vehicleInputSchema,
 } from "@/lib/api/helpers";
 import { createVehicle, listVehicles } from "@/lib/storage/store";
@@ -11,7 +12,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return jsonError("잘못된 JSON 요청입니다.");
+  }
   const parsed = vehicleInputSchema.safeParse(body);
 
   if (!parsed.success) {

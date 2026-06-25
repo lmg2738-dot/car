@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Upload, ImageIcon } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/card";
 import type { VehiclePhoto } from "@/types/database";
+import { readJsonResponse } from "@/lib/api/client";
 
 type Props = {
   vehicleId: string;
@@ -54,7 +55,7 @@ export function PhotoUploader({
               body: formData,
             });
 
-            const data = await res.json();
+            const data = await readJsonResponse<VehiclePhoto & { error?: string }>(res);
             if (!res.ok) {
               throw new Error(data.error ?? "업로드 실패");
             }

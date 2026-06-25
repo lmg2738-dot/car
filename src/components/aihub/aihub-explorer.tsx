@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Input, FormField } from "@/components/ui/input";
 import type { AihubDatasetItem, AihubPackageItem } from "@/lib/aihub/types";
+import { readJsonResponse } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
 type Tab = "datasets" | "packages";
@@ -33,7 +34,7 @@ export function AihubExplorer() {
 
     try {
       const res = await fetch(endpoint);
-      const data = await res.json();
+      const data = await readJsonResponse<{ error?: string; items?: typeof items }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "조회 실패");
@@ -69,7 +70,7 @@ export function AihubExplorer() {
 
     try {
       const res = await fetch(endpoint);
-      const data = await res.json();
+      const data = await readJsonResponse<{ error?: string; raw?: string }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "파일 목록 조회 실패");
@@ -98,7 +99,7 @@ export function AihubExplorer() {
         }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ error?: string; outputDir?: string }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "다운로드 실패");

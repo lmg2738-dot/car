@@ -3,6 +3,7 @@ import {
   generateAdSchema,
   jsonError,
   jsonSuccess,
+  readJsonBody,
 } from "@/lib/api/helpers";
 import { generateListing } from "@/lib/openrouter/vehicle-ai";
 import {
@@ -11,8 +12,13 @@ import {
 } from "@/lib/storage/store";
 import type { ConditionSummary, MarketPrice } from "@/types/database";
 
+export const maxDuration = 120;
+
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return jsonError("잘못된 JSON 요청입니다.");
+  }
   const parsed = generateAdSchema.safeParse(body);
 
   if (!parsed.success) {

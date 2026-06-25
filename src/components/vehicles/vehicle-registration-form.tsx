@@ -6,6 +6,7 @@ import { Car, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Input, Select, FormField } from "@/components/ui/input";
+import { readJsonResponse } from "@/lib/api/client";
 
 export function VehicleRegistrationForm() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export function VehicleRegistrationForm() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ id: string; error?: string }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? "등록에 실패했습니다.");
