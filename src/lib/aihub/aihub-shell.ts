@@ -262,7 +262,7 @@ export async function downloadDataset(
 ): Promise<AihubDownloadResponse> {
   if (isEphemeralAihubStorage()) {
     throw new Error(
-      "Vercel 등 서버리스 환경에서는 대용량 다운로드를 지원하지 않습니다. Render/Docker 배포 또는 로컬에서 실행하세요."
+      "Vercel 등 서버리스 환경에서는 대용량 다운로드를 지원하지 않습니다. 로컬에서 실행하세요."
     );
   }
 
@@ -296,7 +296,7 @@ export async function downloadPackage(
 ): Promise<AihubDownloadResponse> {
   if (isEphemeralAihubStorage()) {
     throw new Error(
-      "Vercel 등 서버리스 환경에서는 대용량 다운로드를 지원하지 않습니다. Render/Docker 배포 또는 로컬에서 실행하세요."
+      "Vercel 등 서버리스 환경에서는 대용량 다운로드를 지원하지 않습니다. 로컬에서 실행하세요."
     );
   }
 

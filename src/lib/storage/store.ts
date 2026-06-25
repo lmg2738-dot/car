@@ -1,5 +1,4 @@
-import fs from "fs";
-import path from "path";
+import { createSupabaseAdmin } from "@/lib/supabase/server";
 import type {
   ConditionSummary,
   GeneratedAd,
@@ -8,113 +7,68 @@ import type {
   VehiclePhoto,
   VehicleStatus,
 } from "@/types/database";
-import {
-  defaultStore,
-  getUploadsRoot,
-  readPhotoBuffer,
-  readStoreData,
-  savePhotoBytes,
-  isBlobStorageEnabled,
-  writeStoreData,
-} from "./persistence";
 
-export const UPLOADS_DIR = getUploadsRoot();
+const PHOTO_BUCKET = "vehicle-photos";
 
-type StoreData = {
-  vehicles: Vehicle[];
+type VehicleWithRelations = Vehicle & {
   vehicle_photos: VehiclePhoto[];
   generated_ads: GeneratedAd[];
 };
 
-let storeCache: StoreData | null = null;
+type VehicleRow = Vehicle & {
+  vehicle_photos?: VehiclePhoto[] | null;
+  generated_ads?: GeneratedAd[] | null;
+};
 
-async function loadStore(): Promise<StoreData> {
-  if (isBlobStorageEnabled()) {
-    return readStoreData();
-  }
-  if (storeCache) return storeCache;
-  storeCache = await readStoreData();
-  return storeCache;
+function sortPhotos(photos: VehiclePhoto[]): VehiclePhoto[] {
+  return [...photos].sort((a, b) => a.sort_order - b.sort_order);
 }
 
-async function persistStore(store: StoreData) {
-  await writeStoreData(store);
-  if (!isBlobStorageEnabled()) {
-    storeCache = store;
-  }
+function sortAds(ads: GeneratedAd[]): GeneratedAd[] {
+  return [...ads].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }
 
-async function mutateStore(
-  mutator: (store: StoreData) => void
-): Promise<StoreData> {
-  const store = await loadStore();
-  mutator(store);
-  await persistStore(store);
-  return store;
-}
-
-function groupPhotosByVehicle(store: StoreData) {
-  const map = new Map<string, VehiclePhoto[]>();
-  for (const photo of store.vehicle_photos) {
-    const list = map.get(photo.vehicle_id) ?? [];
-    list.push(photo);
-    map.set(photo.vehicle_id, list);
-  }
-  for (const list of map.values()) {
-    list.sort((a, b) => a.sort_order - b.sort_order);
-  }
-  return map;
-}
-
-function attachVehicleRelations(
-  store: StoreData,
-  vehicle: Vehicle
-): Vehicle & { vehicle_photos: VehiclePhoto[]; generated_ads: GeneratedAd[] } {
-  const photoMap = groupPhotosByVehicle(store);
+function mapVehicleRow(row: VehicleRow): VehicleWithRelations {
   return {
-    ...vehicle,
-    vehicle_photos: photoMap.get(vehicle.id) ?? [],
-    generated_ads: store.generated_ads
-      .filter((a) => a.vehicle_id === vehicle.id)
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ),
+    ...row,
+    vehicle_photos: sortPhotos(row.vehicle_photos ?? []),
+    generated_ads: sortAds(row.generated_ads ?? []),
   };
 }
 
-export function getPhotoPublicUrl(vehicleId: string, filename: string) {
-  return `/api/uploads/${vehicleId}/${filename}`;
-}
-
-export function getUploadsDir(vehicleId: string) {
-  const dir = path.join(getUploadsRoot(), vehicleId);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  return dir;
+function storagePath(vehicleId: string, filename: string): string {
+  return `${vehicleId}/${filename}`;
 }
 
 export async function listVehicles() {
-  const store = await loadStore();
-  const photoMap = groupPhotosByVehicle(store);
+  const supabase = createSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*, vehicle_photos(*)")
+    .order("created_at", { ascending: false });
 
-  return [...store.vehicles]
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-    .map((vehicle) => ({
-      ...vehicle,
-      vehicle_photos: photoMap.get(vehicle.id) ?? [],
-    }));
+  if (error) throw error;
+
+  return (data as VehicleRow[]).map((row) => ({
+    ...(row as Vehicle),
+    vehicle_photos: sortPhotos(row.vehicle_photos ?? []),
+  }));
 }
 
 export async function getVehicle(id: string) {
-  const store = await loadStore();
-  const vehicle = store.vehicles.find((v) => v.id === id);
-  if (!vehicle) return null;
-  return attachVehicleRelations(store, vehicle);
+  const supabase = createSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*, vehicle_photos(*), generated_ads(*)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return mapVehicleRow(data as VehicleRow);
 }
 
 export async function createVehicle(input: {
@@ -144,9 +98,9 @@ export async function createVehicle(input: {
     updated_at: now,
   };
 
-  await mutateStore((store) => {
-    store.vehicles.push(vehicle);
-  });
+  const supabase = createSupabaseAdmin();
+  const { error } = await supabase.from("vehicles").insert(vehicle);
+  if (error) throw error;
 
   return vehicle;
 }
@@ -163,43 +117,52 @@ export async function updateVehicle(
     >
   >
 ) {
-  const store = await mutateStore((s) => {
-    const index = s.vehicles.findIndex((v) => v.id === id);
-    if (index === -1) return;
+  const supabase = createSupabaseAdmin();
+  const { error } = await supabase
+    .from("vehicles")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id);
 
-    s.vehicles[index] = {
-      ...s.vehicles[index],
-      ...patch,
-      updated_at: new Date().toISOString(),
-    };
-  });
-
-  const vehicle = store.vehicles.find((v) => v.id === id);
-  if (!vehicle) return null;
-  return attachVehicleRelations(store, vehicle);
+  if (error) throw error;
+  return getVehicle(id);
 }
 
 export async function deleteVehicle(id: string) {
-  await mutateStore((store) => {
-    store.vehicles = store.vehicles.filter((v) => v.id !== id);
-    store.vehicle_photos = store.vehicle_photos.filter(
-      (p) => p.vehicle_id !== id
-    );
-    store.generated_ads = store.generated_ads.filter(
-      (a) => a.vehicle_id !== id
-    );
-  });
+  const supabase = createSupabaseAdmin();
 
-  const uploadDir = path.join(getUploadsRoot(), id);
-  if (fs.existsSync(uploadDir)) {
-    fs.rmSync(uploadDir, { recursive: true, force: true });
+  const { data: photos } = await supabase
+    .from("vehicle_photos")
+    .select("storage_path")
+    .eq("vehicle_id", id);
+
+  if (photos?.length) {
+    const paths = photos.map((p) => p.storage_path.replace(/\\/g, "/"));
+    await supabase.storage.from(PHOTO_BUCKET).remove(paths);
   }
+
+  const { error } = await supabase.from("vehicles").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export async function getPhotoCount(vehicleId: string): Promise<number | null> {
-  const store = await loadStore();
-  if (!store.vehicles.some((v) => v.id === vehicleId)) return null;
-  return store.vehicle_photos.filter((p) => p.vehicle_id === vehicleId).length;
+  const supabase = createSupabaseAdmin();
+
+  const { data: vehicle, error: vehicleError } = await supabase
+    .from("vehicles")
+    .select("id")
+    .eq("id", vehicleId)
+    .maybeSingle();
+
+  if (vehicleError) throw vehicleError;
+  if (!vehicle) return null;
+
+  const { count, error } = await supabase
+    .from("vehicle_photos")
+    .select("*", { count: "exact", head: true })
+    .eq("vehicle_id", vehicleId);
+
+  if (error) throw error;
+  return count ?? 0;
 }
 
 export async function addPhotoRecord(
@@ -208,38 +171,25 @@ export async function addPhotoRecord(
   mimeType: string,
   publicUrl: string
 ): Promise<{ photo: VehiclePhoto } | { error: "not_found" | "limit" }> {
-  let photo: VehiclePhoto | null = null;
+  const count = await getPhotoCount(vehicleId);
+  if (count === null) return { error: "not_found" };
+  if (count >= 10) return { error: "limit" };
 
-  await mutateStore((store) => {
-    const vehicle = store.vehicles.find((v) => v.id === vehicleId);
-    if (!vehicle) return;
+  const photo: VehiclePhoto = {
+    id: crypto.randomUUID(),
+    vehicle_id: vehicleId,
+    storage_path: storagePath(vehicleId, filename),
+    public_url: publicUrl,
+    photo_type: "other",
+    analysis_result: null,
+    sort_order: count,
+    created_at: new Date().toISOString(),
+    mime_type: mimeType,
+  };
 
-    const count = store.vehicle_photos.filter(
-      (p) => p.vehicle_id === vehicleId
-    ).length;
-    if (count >= 10) return;
-
-    photo = {
-      id: crypto.randomUUID(),
-      vehicle_id: vehicleId,
-      storage_path: path.join(vehicleId, filename),
-      public_url: publicUrl,
-      photo_type: "other",
-      analysis_result: null,
-      sort_order: count,
-      created_at: new Date().toISOString(),
-      mime_type: mimeType,
-    };
-    store.vehicle_photos.push(photo);
-  });
-
-  if (!photo) {
-    const store = await loadStore();
-    if (!store.vehicles.some((v) => v.id === vehicleId)) {
-      return { error: "not_found" };
-    }
-    return { error: "limit" };
-  }
+  const supabase = createSupabaseAdmin();
+  const { error } = await supabase.from("vehicle_photos").insert(photo);
+  if (error) throw error;
 
   return { photo };
 }
@@ -254,28 +204,32 @@ export async function applyAnalysisResult(
     status: VehicleStatus;
   }
 ) {
-  const store = await mutateStore((s) => {
-    const index = s.vehicles.findIndex((v) => v.id === vehicleId);
-    if (index === -1) return;
+  const supabase = createSupabaseAdmin();
 
-    s.vehicles[index] = {
-      ...s.vehicles[index],
+  const { error: vehicleError } = await supabase
+    .from("vehicles")
+    .update({
       condition_summary: updates.condition_summary,
       price_estimate_min: updates.price_estimate_min,
       price_estimate_max: updates.price_estimate_max,
       status: updates.status,
       updated_at: new Date().toISOString(),
-    };
+    })
+    .eq("id", vehicleId);
 
-    for (const { photo_id, analysis } of updates.photo_analyses) {
-      const photo = s.vehicle_photos.find((p) => p.id === photo_id);
-      if (photo) photo.analysis_result = analysis;
-    }
-  });
+  if (vehicleError) throw vehicleError;
 
-  const vehicle = store.vehicles.find((v) => v.id === vehicleId);
-  if (!vehicle) return null;
-  return attachVehicleRelations(store, vehicle);
+  for (const { photo_id, analysis } of updates.photo_analyses) {
+    const { error } = await supabase
+      .from("vehicle_photos")
+      .update({ analysis_result: analysis })
+      .eq("id", photo_id)
+      .eq("vehicle_id", vehicleId);
+
+    if (error) throw error;
+  }
+
+  return getVehicle(vehicleId);
 }
 
 export async function addGeneratedAd(
@@ -287,9 +241,9 @@ export async function addGeneratedAd(
     ...ad,
   };
 
-  await mutateStore((store) => {
-    store.generated_ads.push(record);
-  });
+  const supabase = createSupabaseAdmin();
+  const { error } = await supabase.from("generated_ads").insert(record);
+  if (error) throw error;
 
   return record;
 }
@@ -300,21 +254,50 @@ export async function savePhotoFile(
   buffer: Buffer,
   mimeType: string
 ) {
-  return savePhotoBytes(vehicleId, filename, buffer, mimeType);
+  const path = storagePath(vehicleId, filename);
+  const supabase = createSupabaseAdmin();
+
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, buffer, {
+    contentType: mimeType,
+    upsert: false,
+  });
+
+  if (error) throw error;
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+
+  return publicUrl;
 }
 
 export async function readPhotoForAnalysis(
   vehicleId: string,
   photo: VehiclePhoto
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  const filename = path.basename(photo.storage_path);
-  const buffer = await readPhotoBuffer(
-    vehicleId,
-    filename,
-    photo.public_url ?? getPhotoPublicUrl(vehicleId, filename)
-  );
-  if (!buffer) return null;
-  return { buffer, mimeType: photo.mime_type ?? "image/jpeg" };
+  if (photo.public_url?.startsWith("http")) {
+    try {
+      const res = await fetch(photo.public_url, { cache: "no-store" });
+      if (!res.ok) return null;
+      return {
+        buffer: Buffer.from(await res.arrayBuffer()),
+        mimeType: photo.mime_type ?? res.headers.get("content-type") ?? "image/jpeg",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  const supabase = createSupabaseAdmin();
+  const path = photo.storage_path.replace(/\\/g, "/");
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).download(path);
+
+  if (error || !data) return null;
+
+  return {
+    buffer: Buffer.from(await data.arrayBuffer()),
+    mimeType: photo.mime_type ?? "image/jpeg",
+  };
 }
 
 export type { VehicleStatus };

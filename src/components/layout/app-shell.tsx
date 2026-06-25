@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           새 차량 등록
         </Link>
         <p className="text-center text-[10px] text-white/30">
-          OpenRouter 무료 AI · 로컬 저장
+          OpenRouter 무료 AI · Supabase
         </p>
       </div>
     </div>

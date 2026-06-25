@@ -67,7 +67,7 @@ export function VehicleDetailView({ vehicleId }: Props) {
           {error ?? "차량을 찾을 수 없습니다."}
         </div>
         <p className="text-sm text-muted-foreground">
-          Vercel 배포 시 Storage → Blob Store 연결 후 재배포가 필요할 수 있습니다.
+          Supabase 테이블·Storage 버킷 설정 후 재배포가 필요할 수 있습니다.
         </p>
         <div className="flex justify-center gap-3">
           <Button variant="outline" onClick={() => void loadVehicle()}>

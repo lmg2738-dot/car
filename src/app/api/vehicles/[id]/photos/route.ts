@@ -38,10 +38,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const currentCount = await getPhotoCount(vehicleId);
     if (currentCount === null) {
-      return jsonError(
-        "차량을 찾을 수 없습니다. 등록 직후라면 잠시 후 다시 시도하거나, Vercel Blob Store 연결을 확인하세요.",
-        404
-      );
+      return jsonError("차량을 찾을 수 없습니다.", 404);
     }
     if (currentCount >= MAX_PHOTOS) {
       return jsonError(`최대 ${MAX_PHOTOS}장까지 업로드 가능합니다.`);
@@ -72,10 +69,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if ("error" in result) {
       if (result.error === "not_found") {
-        return jsonError(
-          "차량을 찾을 수 없습니다. Vercel Blob Store 연결 후 재배포하고 새로 등록하세요.",
-          404
-        );
+        return jsonError("차량을 찾을 수 없습니다.", 404);
       }
       return jsonError(`최대 ${MAX_PHOTOS}장까지 업로드 가능합니다.`);
     }

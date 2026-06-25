@@ -3,42 +3,42 @@
 ## 사전 요구사항
 
 - Node.js 20+
+- [Supabase](https://supabase.com) 프로젝트 (DB + Storage)
 - OpenRouter API 키 ([openrouter.ai](https://openrouter.ai))
 - (선택) AI Hub API 키
 
 ---
 
-## 1. 환경 변수
+## 1. Supabase 설정
 
-| 변수 | 필수 | 설명 |
-|------|------|------|
-| `OPENROUTER_API_KEY` | ✅ | OpenRouter API 키 |
-| `NEXT_PUBLIC_APP_URL` | ✅ | 배포된 공개 URL |
-| `ANALYZE_FALLBACK_MOCK` | 권장 | OpenRouter 실패 시 데모 분석 (기본 `true`) |
-| `ANALYZE_MOCK_MODE` | 선택 | 항상 데모 분석 (`true`/`false`) |
-| `AIHUB_API_KEY` | 선택 | AI Hub 데이터 다운로드 |
-
-> API 키는 GitHub에 커밋하지 마세요.
+1. Supabase 프로젝트 → **SQL Editor**에서 `supabase/schema.sql` 내용 실행
+2. **Storage**에 `vehicle-photos` public 버킷이 생성되었는지 확인
+3. **Project Settings → API**에서 URL·Service Role Key 확인
 
 ---
 
-## 2. Vercel 배포
+## 2. 환경 변수
 
-Vercel **서버리스** 환경에서는 인스턴스 간 데이터 공유를 위해 **Vercel Blob** 연결이 필요합니다.
+| 변수 | 필수 | 설명 |
+|------|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase 프로젝트 URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | 서버 API용 (비공개) |
+| `OPENROUTER_API_KEY` | ✅ | OpenRouter API 키 |
+| `NEXT_PUBLIC_APP_URL` | ✅ | 배포된 공개 URL |
+| `ANALYZE_FALLBACK_MOCK` | 권장 | OpenRouter 실패 시 데모 분석 (`true`) |
+| `AIHUB_API_KEY` | 선택 | AI Hub 데이터 다운로드 |
 
-1. Vercel 프로젝트 → **Storage** → **Create Blob Store** → 프로젝트 연결
-2. [Vercel Import](https://vercel.com/new/import?s=https://github.com/lmg2738-dot/car) 또는 기존 프로젝트 재배포
-3. Environment Variables:
-   - `OPENROUTER_API_KEY`
-   - `NEXT_PUBLIC_APP_URL` = `https://car-theta-three.vercel.app` (본인 URL)
-   - `ANALYZE_FALLBACK_MOCK` = `true`
-   - `AIHUB_API_KEY` (AI Hub 사용 시)
-   - `BLOB_READ_WRITE_TOKEN` — Blob Store 연결 시 자동 주입
-4. Deploy
+> API 키·Service Role Key는 GitHub에 커밋하지 마세요.
 
-> Blob 미연결 시 차량 등록 후 **상세 페이지 404**가 발생할 수 있습니다.
+`NEXT_PUBLIC_STORYSUPABASE_URL` 변수명도 지원합니다.
 
-UI·API 동작 확인용으로 권장합니다. AI Hub **대용량 다운로드**는 Docker 배포를 사용하세요.
+---
+
+## 3. Vercel 배포
+
+1. [Vercel Import](https://vercel.com/new/import?s=https://github.com/lmg2738-dot/car) 또는 기존 프로젝트 재배포
+2. Environment Variables에 위 항목 설정
+3. Deploy
 
 GitHub Actions 자동 배포 (선택):
 
@@ -47,47 +47,23 @@ GitHub Actions 자동 배포 (선택):
 
 ---
 
-## 3. Docker (운영 권장)
-
-`data/` 폴더 영구 저장 및 AI Hub **대용량 다운로드**가 필요하면 Docker를 사용하세요.
-
-```bash
-# .env.local 준비 후
-docker compose up -d --build
-```
-
-또는:
-
-```bash
-docker build -t autodealer-copilot .
-docker run -d -p 50006:50006 \
-  -v autodealer-data:/app/data \
-  --env-file .env.local \
-  -e NEXT_PUBLIC_APP_URL=https://your-domain.com \
-  autodealer-copilot
-```
-
----
-
 ## 4. 로컬 운영 모드
 
 ```bash
-npm run build
-npm run start
+npm install
+cp .env.example .env.local   # Supabase·OpenRouter 키 입력
+npm run dev
 ```
 
 ---
 
 ## 5. AI Hub (선택)
 
-로컬 / Docker:
-
 ```bash
 npm run aihub:setup
 ```
 
-Vercel 배포 시 `vercel-build` 스크립트가 aihubshell을 설치하며, 없을 경우 런타임에 `/tmp`에 자동 다운로드합니다.
-**대용량 데이터 다운로드**는 Docker 배포에서 사용하세요.
+Vercel 배포 시 `vercel-build` 스크립트가 aihubshell을 설치합니다.
 
 Windows: WSL 또는 Git Bash 권장 (`AIHUB_BASH_PATH` 설정 가능)
 
@@ -95,10 +71,12 @@ Windows: WSL 또는 Git Bash 권장 (`AIHUB_BASH_PATH` 설정 가능)
 
 ## 6. 체크리스트
 
+- [ ] Supabase 테이블·Storage 버킷 생성 (`supabase/schema.sql`)
+- [ ] `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 설정
 - [ ] `OPENROUTER_API_KEY` 설정
 - [ ] `NEXT_PUBLIC_APP_URL`이 실제 접속 URL과 일치
+- [ ] `/api/storage/health` → `"ok": true`
 - [ ] 차량 등록 → 사진 업로드 → AI 분석 → 판매글 생성 플로우 테스트
-- [ ] `/api/models`에서 무료 모델 목록 확인
 
 ---
 
