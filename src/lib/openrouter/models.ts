@@ -1,5 +1,19 @@
 const OPENROUTER_API = "https://openrouter.ai/api/v1";
 
+/** OpenRouter 무료 Vision 모델 (우선 시도 순서) */
+export const KNOWN_FREE_VISION_MODEL_IDS = [
+  "openrouter/free",
+  "google/gemini-2.0-flash-exp:free",
+  "qwen/qwen2.5-vl-32b-instruct:free",
+  "qwen/qwen2.5-vl-72b-instruct:free",
+  "google/gemma-3-27b-it:free",
+  "google/gemma-3-12b-it:free",
+  "google/gemma-3-4b-it:free",
+  "meta-llama/llama-3.2-11b-vision-instruct:free",
+  "mistralai/mistral-small-3.1-24b-instruct:free",
+  "moonshotai/kimi-vl-a3b-thinking:free",
+] as const;
+
 export type OpenRouterModel = {
   id: string;
   name: string;
@@ -21,7 +35,7 @@ type ModelsCache = {
   models: OpenRouterModel[];
 };
 
-const CACHE_TTL_MS = 60 * 60 * 1000;
+const CACHE_TTL_MS = 15 * 60 * 1000;
 let cache: ModelsCache | null = null;
 const runtimeBlacklist = new Set<string>();
 
@@ -35,7 +49,7 @@ function getApiKey(): string {
   return key;
 }
 
-function isFreeModel(model: OpenRouterModel): boolean {
+export function isFreeModel(model: OpenRouterModel): boolean {
   const prices = [
     model.pricing.prompt,
     model.pricing.completion,
@@ -44,6 +58,10 @@ function isFreeModel(model: OpenRouterModel): boolean {
   ].filter((v) => v !== undefined && v !== null);
 
   return prices.every((p) => parseFloat(p) === 0);
+}
+
+export function isLikelyFreeModelId(id: string): boolean {
+  return id === "openrouter/free" || id.endsWith(":free");
 }
 
 export function supportsVision(model: OpenRouterModel): boolean {
@@ -81,7 +99,9 @@ export function isFreeQuotaExceededError(error: unknown): boolean {
   return (
     msg.includes("free-models-per-day") ||
     msg.includes("free model requests per day") ||
-    (msg.includes("rate limit") && msg.includes("free"))
+    msg.includes("free model rate limit") ||
+    (msg.includes("rate limit") && msg.includes("free")) ||
+    (msg.includes("429") && msg.includes("free"))
   );
 }
 
@@ -96,7 +116,7 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 export const FREE_QUOTA_EXCEEDED_MESSAGE =
-  "OpenRouter 무료 모델 일일 한도에 도달했습니다. openrouter.ai에서 크레딧을 충전하거나, Vercel에 OPENROUTER_VISION_MODEL(유료 Vision 모델)과 OPENROUTER_ALLOW_PAID_MODELS=true를 설정하세요.";
+  "OpenRouter 무료 모델 일일 한도에 도달했습니다. UTC 자정 이후 다시 시도하거나 openrouter.ai/activity 에서 남은 한도를 확인하세요.";
 
 export type OpenRouterKeyInfo = {
   is_free_tier: boolean;
@@ -131,7 +151,7 @@ export async function fetchKeyInfo(): Promise<OpenRouterKeyInfo> {
     limit_remaining: data.limit_remaining ?? null,
     usage_daily: data.usage_daily ?? 0,
     free_models_note: isFreeTier
-      ? "무료 계정: :free 모델 하루 약 50회 (크레딧 $10 충전 시 약 1,000회)"
+      ? "무료 계정: :free 모델 하루 약 50회"
       : "크레딧 충전 이력 있음: :free 모델 하루 약 1,000회",
   };
 }
@@ -139,15 +159,18 @@ export async function fetchKeyInfo(): Promise<OpenRouterKeyInfo> {
 function getPreferredModelIds(): string[] {
   const raw = process.env.OPENROUTER_PREFERRED_FREE_MODEL?.trim();
   if (!raw) return [];
-  return raw.split(",").map((id) => id.trim()).filter(Boolean);
+  return raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => isLikelyFreeModelId(id));
 }
 
 export function getMaxModelAttempts(): number {
   const parsed = Number.parseInt(
-    process.env.OPENROUTER_MAX_MODEL_ATTEMPTS ?? "2",
+    process.env.OPENROUTER_MAX_MODEL_ATTEMPTS ?? "12",
     10
   );
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 20) : 12;
 }
 
 export async function getFreeModelGroups() {
@@ -168,6 +191,7 @@ export async function getFreeModelGroups() {
   return {
     text: text.map((m) => ({ id: m.id, name: m.name })),
     vision: vision.map((m) => ({ id: m.id, name: m.name })),
+    known_free_vision: [...KNOWN_FREE_VISION_MODEL_IDS],
     active_ids: free.map((m) => m.id),
   };
 }
@@ -179,7 +203,7 @@ export async function fetchAllModels(): Promise<OpenRouterModel[]> {
 
   const res = await fetch(`${OPENROUTER_API}/models`, {
     headers: { Authorization: `Bearer ${getApiKey()}` },
-    next: { revalidate: 3600 },
+    cache: "no-store",
   });
 
   if (!res.ok) {
@@ -191,116 +215,91 @@ export async function fetchAllModels(): Promise<OpenRouterModel[]> {
   return cache.models;
 }
 
-function getExplicitModelIds(): string[] {
-  const ids = [
-    ...(process.env.OPENROUTER_VISION_MODEL?.split(",") ?? []),
-    ...(process.env.OPENROUTER_PREFERRED_FREE_MODEL?.split(",") ?? []),
-  ];
-  return ids.map((id) => id.trim()).filter(Boolean);
+function stubModel(id: string): OpenRouterModel {
+  return {
+    id,
+    name: id,
+    pricing: { prompt: "0", completion: "0" },
+  };
 }
 
-function modelCost(model: OpenRouterModel): number {
-  return (
-    parseFloat(model.pricing.prompt || "0") +
-    parseFloat(model.pricing.completion || "0")
-  );
+function tryAddModel(
+  result: OpenRouterModel[],
+  seen: Set<string>,
+  max: number,
+  candidate: OpenRouterModel,
+  options?: { vision?: boolean }
+): void {
+  if (result.length >= max || seen.has(candidate.id)) return;
+  if (runtimeBlacklist.has(candidate.id)) return;
+  if (!isFreeModel(candidate) && !isLikelyFreeModelId(candidate.id)) return;
+  if (options?.vision && !supportsVision(candidate) && candidate.id !== "openrouter/free") {
+    return;
+  }
+  result.push(candidate);
+  seen.add(candidate.id);
 }
 
-async function getAffordableVisionModels(limit: number): Promise<OpenRouterModel[]> {
-  const all = await fetchAllModels();
-  return all
-    .filter((m) => supportsVision(m))
-    .filter((m) => !isFreeModel(m))
-    .filter((m) => !runtimeBlacklist.has(m.id))
-    .sort((a, b) => modelCost(a) - modelCost(b))
-    .slice(0, limit);
-}
-
-/** 분석용 모델 목록: 지정 모델 → 무료 → (옵션) 저가 유료 Vision */
-export async function getAnalysisModels(options?: {
+/** 무료 모델만 반환 (유료·목업 없음) */
+export async function getFreeAnalysisModels(options?: {
   vision?: boolean;
 }): Promise<OpenRouterModel[]> {
   const max = getMaxModelAttempts();
   const all = await fetchAllModels();
-  const explicitIds = getExplicitModelIds();
   const result: OpenRouterModel[] = [];
   const seen = new Set<string>();
 
-  for (const id of explicitIds) {
-    if (seen.has(id)) continue;
+  const preferred = getPreferredModelIds();
+
+  for (const id of preferred) {
     const found = all.find((m) => m.id === id);
-    if (found && (!options?.vision || supportsVision(found))) {
-      result.push(found);
-      seen.add(id);
-      continue;
-    }
-    if (!found) {
-      result.push({
-        id,
-        name: id,
-        pricing: { prompt: "0", completion: "0" },
-      });
-      seen.add(id);
-    }
+    tryAddModel(result, seen, max, found ?? stubModel(id), options);
   }
 
-  const free = (await getFreeModels(options)).filter((m) => !seen.has(m.id));
-  for (const m of free) {
-    if (result.length >= max) break;
-    result.push(m);
-    seen.add(m.id);
-  }
-
-  if (
-    result.length < max &&
-    process.env.OPENROUTER_ALLOW_PAID_MODELS === "true" &&
-    options?.vision
-  ) {
-    const paid = await getAffordableVisionModels(max * 2);
-    for (const m of paid) {
+  if (options?.vision) {
+    for (const id of KNOWN_FREE_VISION_MODEL_IDS) {
       if (result.length >= max) break;
-      if (seen.has(m.id)) continue;
-      result.push(m);
-      seen.add(m.id);
+      const found = all.find((m) => m.id === id);
+      tryAddModel(result, seen, max, found ?? stubModel(id), options);
     }
   }
 
-  return result.slice(0, max);
+  const fromApi = all
+    .filter(isFreeModel)
+    .filter((m) => !runtimeBlacklist.has(m.id))
+    .filter((m) => (options?.vision ? supportsVision(m) : true))
+    .sort((a, b) => {
+      const aKnown = a.id.includes(":free") ? 0 : 1;
+      const bKnown = b.id.includes(":free") ? 0 : 1;
+      if (aKnown !== bKnown) return aKnown - bKnown;
+      return a.name.localeCompare(b.name);
+    });
+
+  for (const m of fromApi) {
+    if (result.length >= max) break;
+    tryAddModel(result, seen, max, m, options);
+  }
+
+  return result;
+}
+
+/** @deprecated getFreeAnalysisModels 사용 */
+export async function getAnalysisModels(options?: {
+  vision?: boolean;
+}): Promise<OpenRouterModel[]> {
+  return getFreeAnalysisModels(options);
 }
 
 export async function getFreeModels(options?: {
   vision?: boolean;
 }): Promise<OpenRouterModel[]> {
-  const all = await fetchAllModels();
-  const preferred = getPreferredModelIds();
-
-  let models = all
-    .filter(isFreeModel)
-    .filter((m) => !runtimeBlacklist.has(m.id))
-    .filter((m) => (options?.vision ? supportsVision(m) : true))
-    .sort((a, b) => {
-      const aFree = a.id.includes(":free") ? 0 : 1;
-      const bFree = b.id.includes(":free") ? 0 : 1;
-      if (aFree !== bFree) return aFree - bFree;
-      return a.name.localeCompare(b.name);
-    });
-
-  if (preferred.length > 0) {
-    const picked = preferred
-      .map((id) => models.find((m) => m.id === id))
-      .filter((m): m is OpenRouterModel => m !== undefined);
-    if (picked.length > 0) {
-      models = picked;
-    }
-  }
-
-  return models.slice(0, getMaxModelAttempts());
+  return getFreeAnalysisModels(options);
 }
 
 export async function getActiveFreeModelIds(options?: {
   vision?: boolean;
 }): Promise<string[]> {
-  const models = await getFreeModels(options);
+  const models = await getFreeAnalysisModels(options);
   return models.map((m) => m.id);
 }
 

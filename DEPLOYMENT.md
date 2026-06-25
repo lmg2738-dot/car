@@ -25,9 +25,10 @@
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | 서버 API용 (비공개) |
 | `OPENROUTER_API_KEY` | ✅ | OpenRouter API 키 |
 | `NEXT_PUBLIC_APP_URL` | ✅ | 배포된 공개 URL |
-| `ANALYZE_FALLBACK_MOCK` | 선택 | OpenRouter 실패 시 데모 분석 (`false` 권장) |
-| `OPENROUTER_VISION_MODEL` | 권장 | Vision 분석 모델 (예: `google/gemini-2.5-flash`) |
-| `OPENROUTER_ALLOW_PAID_MODELS` | 권장 | `true` — 무료 한도 초과 시 유료 모델 사용 |
+| `ANALYZE_MOCK_MODE` | 선택 | `false` — 데모 분석 비활성 |
+| `ANALYZE_FALLBACK_MOCK` | 선택 | `false` — 실패 시 목업 대체 비활성 |
+| `OPENROUTER_MAX_MODEL_ATTEMPTS` | 선택 | 무료 모델 시도 수 (기본 `12`) |
+| `OPENROUTER_PREFERRED_FREE_MODEL` | 선택 | 우선 무료 Vision 모델 (`:free` 필수) |
 | `AIHUB_API_KEY` | 선택 | AI Hub 데이터 다운로드 |
 
 > API 키·Service Role Key는 GitHub에 커밋하지 마세요.
@@ -84,5 +85,5 @@ Windows: WSL 또는 Git Bash 권장 (`AIHUB_BASH_PATH` 설정 가능)
 
 ## 7. OpenRouter 무료 한도
 
-- 무료 모델 일일 한도 초과 시 `OPENROUTER_ALLOW_PAID_MODELS=true`와 크레딧 충전 필요
+- 무료 모델 일일 한도 초과 시 UTC 자정 이후 재시도 (유료·목업 미사용)
 - 실제 Vision 분석: 크레딧 충전 또는 한도 복구 후 재시도

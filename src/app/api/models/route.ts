@@ -11,9 +11,9 @@ export async function GET() {
     ...groups,
     quota: keyInfo,
     tips: [
-      "실제 Vision 분석: OPENROUTER_VISION_MODEL=google/gemini-2.5-flash 권장",
-      "무료 한도 초과 시 OPENROUTER_ALLOW_PAID_MODELS=true (크레딧 필요)",
-      "데모 분석은 ANALYZE_MOCK_MODE=true 또는 ANALYZE_FALLBACK_MOCK=true 일 때만",
+      "무료 Vision만 사용 — 유료·목업 없음",
+      "한도 초과 시 UTC 자정 이후 재시도 (openrouter.ai/activity)",
+      "OPENROUTER_PREFERRED_FREE_MODEL 로 우선 모델 지정 가능 (:free 필수)",
     ],
   });
 }
