@@ -20,13 +20,17 @@ ENV PORT=50006
 ENV HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 nextjs && \
+    apk add --no-cache curl
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-RUN mkdir -p /app/data/uploads && chown -R nextjs:nodejs /app/data
+RUN mkdir -p /app/bin /app/data/uploads && \
+    curl -fsSL https://api.aihub.or.kr/api/aihubshell.do -o /app/bin/aihubshell && \
+    chmod +x /app/bin/aihubshell && \
+    chown -R nextjs:nodejs /app/data /app/bin
 
 USER nextjs
 EXPOSE 50006

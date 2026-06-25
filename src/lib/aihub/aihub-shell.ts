@@ -19,16 +19,46 @@ function getApiKey(): string {
   return key;
 }
 
+/** Vercel/Lambda 등 쓰기 가능 경로가 /tmp 뿐인 환경 */
+export function isServerlessEnv(): boolean {
+  return (
+    process.env.VERCEL === "1" ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    process.cwd().startsWith("/var/task")
+  );
+}
+
+function getBinDir(): string {
+  const custom = process.env.AIHUB_SHELL_PATH?.trim();
+  if (custom) return path.dirname(custom);
+
+  if (isServerlessEnv()) {
+    return path.join("/tmp", "aihub-bin");
+  }
+
+  return path.join(process.cwd(), "bin");
+}
+
 export function getAihubShellPath(): string {
   const custom = process.env.AIHUB_SHELL_PATH?.trim();
   if (custom) return custom;
-  return path.join(process.cwd(), "bin", "aihubshell");
+  return path.join(getBinDir(), "aihubshell");
 }
 
 export function getDefaultDownloadDir(): string {
   const custom = process.env.AIHUB_DOWNLOAD_DIR?.trim();
   if (custom) return custom;
+
+  if (isServerlessEnv()) {
+    return path.join("/tmp", "aihub-downloads");
+  }
+
   return path.join(process.cwd(), "data", "aihub");
+}
+
+/** 서버리스에서는 다운로드 파일이 요청 종료 후 사라짐 */
+export function isEphemeralAihubStorage(): boolean {
+  return isServerlessEnv() && !process.env.AIHUB_DOWNLOAD_DIR?.trim();
 }
 
 /** aihubshell 바이너리 존재 여부 */
@@ -42,9 +72,33 @@ export function isAihubshellInstalled(): boolean {
   }
 }
 
-/** aihubshell 다운로드 (Linux/macOS/Git Bash) */
+let ensurePromise: Promise<string> | null = null;
+
+/** 없으면 자동 다운로드 (Vercel /tmp 포함) */
+export async function ensureAihubshell(): Promise<string> {
+  if (!ensurePromise) {
+    ensurePromise = (async () => {
+      const shellPath = getAihubShellPath();
+      if (fs.existsSync(shellPath)) {
+        try {
+          fs.chmodSync(shellPath, 0o755);
+        } catch {
+          /* ignore */
+        }
+        return shellPath;
+      }
+      return downloadAihubshell();
+    })().catch((err) => {
+      ensurePromise = null;
+      throw err;
+    });
+  }
+  return ensurePromise;
+}
+
+/** aihubshell 다운로드 */
 export async function downloadAihubshell(): Promise<string> {
-  const binDir = path.join(process.cwd(), "bin");
+  const binDir = getBinDir();
   const shellPath = path.join(binDir, "aihubshell");
 
   if (!fs.existsSync(binDir)) {
@@ -58,6 +112,12 @@ export async function downloadAihubshell(): Promise<string> {
 
   const buffer = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(shellPath, buffer, { mode: 0o755 });
+
+  try {
+    fs.chmodSync(shellPath, 0o755);
+  } catch {
+    /* Windows 등 */
+  }
 
   return shellPath;
 }
@@ -108,17 +168,11 @@ function getBashPath(): string {
 }
 
 /** aihubshell 실행 */
-export function runAihubshell(
+export async function runAihubshell(
   args: string[],
   cwd?: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const shellPath = getAihubShellPath();
-
-  if (!fs.existsSync(shellPath)) {
-    throw new Error(
-      `aihubshell이 설치되지 않았습니다. npm run aihub:setup 을 실행하세요. (${shellPath})`
-    );
-  }
+  const shellPath = await ensureAihubshell();
 
   return new Promise((resolve, reject) => {
     const isWin = process.platform === "win32";
@@ -149,7 +203,11 @@ export function runAihubshell(
           )
         );
       } else {
-        reject(err);
+        reject(
+          new Error(
+            `aihubshell 실행 실패: ${err.message}. Vercel 등 서버리스에서는 조회만 지원될 수 있습니다.`
+          )
+        );
       }
     });
     proc.on("close", (exitCode) => {
@@ -210,6 +268,12 @@ export async function downloadDataset(
   filekeys?: number[],
   outputDir?: string
 ): Promise<AihubDownloadResponse> {
+  if (isEphemeralAihubStorage()) {
+    throw new Error(
+      "Vercel 등 서버리스 환경에서는 대용량 다운로드를 지원하지 않습니다. Render/Docker 배포 또는 로컬에서 실행하세요."
+    );
+  }
+
   const dir = outputDir ?? getDefaultDownloadDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -238,6 +302,12 @@ export async function downloadPackage(
   filekeys?: number[],
   outputDir?: string
 ): Promise<AihubDownloadResponse> {
+  if (isEphemeralAihubStorage()) {
+    throw new Error(
+      "Vercel 등 서버리스 환경에서는 대용량 다운로드를 지원하지 않습니다. Render/Docker 배포 또는 로컬에서 실행하세요."
+    );
+  }
+
   const dir = outputDir ?? getDefaultDownloadDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

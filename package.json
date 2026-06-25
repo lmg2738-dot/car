@@ -6,6 +6,7 @@
     "dev": "next dev -p 50006",
     "dev:clean": "node -e \"try{require('fs').rmSync('.next',{recursive:true,force:true})}catch(e){}\" && next dev -p 50006",
     "build": "next build",
+    "vercel-build": "node scripts/setup-aihubshell.mjs && next build",
     "start": "next start -p 50006",
     "docker:build": "docker build -t autodealer-copilot .",
     "docker:up": "docker compose up -d --build",

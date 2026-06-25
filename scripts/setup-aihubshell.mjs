@@ -9,11 +9,14 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const binDir = path.join(root, "bin");
-const shellPath = path.join(binDir, "aihubshell");
-const AIHUB_SHELL_URL = "https://api.aihub.or.kr/api/aihubshell.do";
 
 async function main() {
+  const binDir = process.env.AIHUB_BIN_DIR
+    ? path.resolve(process.env.AIHUB_BIN_DIR)
+    : path.join(root, "bin");
+  const shellPath = path.join(binDir, "aihubshell");
+  const AIHUB_SHELL_URL = "https://api.aihub.or.kr/api/aihubshell.do";
+
   console.log("AI Hub aihubshell 설치 중...");
 
   if (!fs.existsSync(binDir)) {

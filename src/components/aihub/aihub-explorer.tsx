@@ -146,7 +146,7 @@ export function AihubExplorer() {
         <CardHeader
           icon={<Search className="h-5 w-5" />}
           title={tab === "datasets" ? "AI Hub 데이터셋" : "AI Hub 데이터패키지"}
-          description="aihubshell API를 통해 개방 데이터를 조회·다운로드합니다."
+          description="aihubshell API를 통해 개방 데이터를 조회·다운로드합니다. (Vercel에서는 조회만 가능)"
         />
         <div className="flex gap-3">
           <div className="flex-1">
