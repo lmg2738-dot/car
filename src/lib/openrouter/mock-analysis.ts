@@ -68,9 +68,7 @@ export function isMockAnalyzeEnabled(): boolean {
   return process.env.ANALYZE_MOCK_MODE === "true";
 }
 
-/** OpenRouter 실패 시 데모 분석으로 대체 (기본: 활성) */
+/** OpenRouter 실패 시 데모 분석으로 대체 (기본: 비활성, true일 때만) */
 export function isAnalyzeFallbackMockEnabled(): boolean {
-  const flag = process.env.ANALYZE_FALLBACK_MOCK;
-  if (flag === "false") return false;
-  return true;
+  return process.env.ANALYZE_FALLBACK_MOCK === "true";
 }

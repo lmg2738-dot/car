@@ -1,8 +1,8 @@
 import {
   blacklistModel,
   FREE_QUOTA_EXCEEDED_MESSAGE,
+  getAnalysisModels,
   getApiKey,
-  getFreeModels,
   isFreeQuotaExceededError,
   isModelUnavailableError,
   isRetryableError,
@@ -100,17 +100,17 @@ async function callModel(
   return content;
 }
 
-/** 무료 모델을 순차 시도하며, 사용 불가 모델만 자동 제외 */
-export async function chatWithFreeModels(
+/** Vision/텍스트 분석용 모델을 순차 시도 (무료·지정·유료 옵션) */
+export async function chatWithModels(
   options: ChatOptions
 ): Promise<ChatResult> {
-  const models = await getFreeModels({ vision: options.requireVision });
+  const models = await getAnalysisModels({ vision: options.requireVision });
 
   if (models.length === 0) {
     throw new Error(
       options.requireVision
-        ? "사용 가능한 무료 Vision 모델이 없습니다."
-        : "사용 가능한 무료 모델이 없습니다."
+        ? "사용 가능한 Vision 모델이 없습니다. OPENROUTER_VISION_MODEL 또는 OPENROUTER_ALLOW_PAID_MODELS=true를 설정하세요."
+        : "사용 가능한 모델이 없습니다."
     );
   }
 
@@ -180,6 +180,13 @@ export async function chatWithFreeModels(
   }
 
   throw new Error(
-    `모든 무료 모델 시도 실패:\n${errors.slice(0, 3).join("\n")}`
+    `모든 모델 시도 실패:\n${errors.slice(0, 3).join("\n")}`
   );
+}
+
+/** @deprecated chatWithModels 사용 */
+export async function chatWithFreeModels(
+  options: ChatOptions
+): Promise<ChatResult> {
+  return chatWithModels(options);
 }

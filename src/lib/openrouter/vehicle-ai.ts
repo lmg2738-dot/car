@@ -1,5 +1,5 @@
 import fs from "fs";
-import { chatWithFreeModels, type ChatMessage } from "./client";
+import { chatWithModels, type ChatMessage } from "./client";
 import type {
   AdPlatform,
   AdStyle,
@@ -107,7 +107,7 @@ export async function analyzeVehicle(
           content: `다음 차량을 분석해주세요 (사진 없음, 텍스트 정보만):\n${vehicleInfo}`,
         };
 
-  const { content, model } = await chatWithFreeModels({
+  const { content, model } = await chatWithModels({
     requireVision: photoPaths.length > 0,
     jsonMode: true,
     messages: [
@@ -152,7 +152,7 @@ export async function generateListing(
   platform: AdPlatform,
   style: AdStyle
 ): Promise<GeneratedListingContent> {
-  const { content, model } = await chatWithFreeModels({
+  const { content, model } = await chatWithModels({
     jsonMode: true,
     messages: [
       {

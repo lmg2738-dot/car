@@ -28,6 +28,7 @@ export function AnalyzePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [result, setResult] = useState<{
     condition_summary: ConditionSummary;
     market_price: MarketPrice;
@@ -50,6 +51,7 @@ export function AnalyzePanel({
     setLoading(true);
     setError(null);
     setWarning(null);
+    setModelUsed(null);
 
     try {
       const res = await fetch("/api/car/analyze", {
@@ -61,8 +63,9 @@ export function AnalyzePanel({
 
       const data = await readJsonResponse<{
         error?: string;
-        analysis?: typeof result;
+        analysis?: typeof result & { model_used?: string };
         warning?: string;
+        mock_fallback?: boolean;
       }>(res);
 
       if (!res.ok) {
@@ -71,6 +74,10 @@ export function AnalyzePanel({
 
       setResult(data.analysis ?? null);
       setWarning(data.warning ?? null);
+      const analysis = data.analysis as { model_used?: string } | null | undefined;
+      setModelUsed(
+        data.mock_fallback ? "mock/local-demo" : analysis?.model_used ?? null
+      );
       await safeRouterRefresh(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "분석에 실패했습니다.");
@@ -104,6 +111,12 @@ export function AnalyzePanel({
           <AlertCircle className="h-4 w-4 shrink-0" />
           사진을 먼저 업로드해주세요.
         </div>
+      )}
+
+      {modelUsed && !warning && (
+        <p className="mb-3 text-xs text-muted-foreground">
+          분석 모델: <span className="font-mono">{modelUsed}</span>
+        </p>
       )}
 
       {warning && (

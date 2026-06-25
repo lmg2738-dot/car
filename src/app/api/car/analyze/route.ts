@@ -133,8 +133,8 @@ export const POST = withApiRoute(async (request: NextRequest) => {
     const code = (err as Error & { code?: string }).code;
 
     if (
-      !isMockAnalyzeEnabled() &&
       isAnalyzeFallbackMockEnabled() &&
+      !isMockAnalyzeEnabled() &&
       code !== "FREE_QUOTA_EXCEEDED"
     ) {
       try {

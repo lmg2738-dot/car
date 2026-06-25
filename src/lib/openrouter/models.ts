@@ -96,7 +96,7 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 export const FREE_QUOTA_EXCEEDED_MESSAGE =
-  "OpenRouter 무료 모델 일일 한도에 도달했습니다. 신규 계정은 하루 50회, $10 크레딧 충전(1회) 시 하루 1,000회까지 무료 모델 사용 가능합니다. UTC 자정에 일부 한도가 초기화됩니다. 개발 중에는 .env.local에 ANALYZE_MOCK_MODE=true 로 데모 분석을 사용할 수 있습니다.";
+  "OpenRouter 무료 모델 일일 한도에 도달했습니다. openrouter.ai에서 크레딧을 충전하거나, Vercel에 OPENROUTER_VISION_MODEL(유료 Vision 모델)과 OPENROUTER_ALLOW_PAID_MODELS=true를 설정하세요.";
 
 export type OpenRouterKeyInfo = {
   is_free_tier: boolean;
@@ -189,6 +189,83 @@ export async function fetchAllModels(): Promise<OpenRouterModel[]> {
   const json = (await res.json()) as { data: OpenRouterModel[] };
   cache = { fetchedAt: Date.now(), models: json.data ?? [] };
   return cache.models;
+}
+
+function getExplicitModelIds(): string[] {
+  const ids = [
+    ...(process.env.OPENROUTER_VISION_MODEL?.split(",") ?? []),
+    ...(process.env.OPENROUTER_PREFERRED_FREE_MODEL?.split(",") ?? []),
+  ];
+  return ids.map((id) => id.trim()).filter(Boolean);
+}
+
+function modelCost(model: OpenRouterModel): number {
+  return (
+    parseFloat(model.pricing.prompt || "0") +
+    parseFloat(model.pricing.completion || "0")
+  );
+}
+
+async function getAffordableVisionModels(limit: number): Promise<OpenRouterModel[]> {
+  const all = await fetchAllModels();
+  return all
+    .filter((m) => supportsVision(m))
+    .filter((m) => !isFreeModel(m))
+    .filter((m) => !runtimeBlacklist.has(m.id))
+    .sort((a, b) => modelCost(a) - modelCost(b))
+    .slice(0, limit);
+}
+
+/** 분석용 모델 목록: 지정 모델 → 무료 → (옵션) 저가 유료 Vision */
+export async function getAnalysisModels(options?: {
+  vision?: boolean;
+}): Promise<OpenRouterModel[]> {
+  const max = getMaxModelAttempts();
+  const all = await fetchAllModels();
+  const explicitIds = getExplicitModelIds();
+  const result: OpenRouterModel[] = [];
+  const seen = new Set<string>();
+
+  for (const id of explicitIds) {
+    if (seen.has(id)) continue;
+    const found = all.find((m) => m.id === id);
+    if (found && (!options?.vision || supportsVision(found))) {
+      result.push(found);
+      seen.add(id);
+      continue;
+    }
+    if (!found) {
+      result.push({
+        id,
+        name: id,
+        pricing: { prompt: "0", completion: "0" },
+      });
+      seen.add(id);
+    }
+  }
+
+  const free = (await getFreeModels(options)).filter((m) => !seen.has(m.id));
+  for (const m of free) {
+    if (result.length >= max) break;
+    result.push(m);
+    seen.add(m.id);
+  }
+
+  if (
+    result.length < max &&
+    process.env.OPENROUTER_ALLOW_PAID_MODELS === "true" &&
+    options?.vision
+  ) {
+    const paid = await getAffordableVisionModels(max * 2);
+    for (const m of paid) {
+      if (result.length >= max) break;
+      if (seen.has(m.id)) continue;
+      result.push(m);
+      seen.add(m.id);
+    }
+  }
+
+  return result.slice(0, max);
 }
 
 export async function getFreeModels(options?: {

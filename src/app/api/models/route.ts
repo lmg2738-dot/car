@@ -11,9 +11,9 @@ export async function GET() {
     ...groups,
     quota: keyInfo,
     tips: [
-      "분석 1회 = API 호출 1~2회 (모델 1~2개만 시도하도록 OPENROUTER_MAX_MODEL_ATTEMPTS=2 권장)",
-      "한도 소진 시 ANALYZE_MOCK_MODE=true 로 데모 분석 가능",
-      "openrouter.ai 에서 $10 충전(1회) 시 무료 모델 일 1,000회",
+      "실제 Vision 분석: OPENROUTER_VISION_MODEL=google/gemini-2.5-flash 권장",
+      "무료 한도 초과 시 OPENROUTER_ALLOW_PAID_MODELS=true (크레딧 필요)",
+      "데모 분석은 ANALYZE_MOCK_MODE=true 또는 ANALYZE_FALLBACK_MOCK=true 일 때만",
     ],
   });
 }
