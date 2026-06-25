@@ -4,6 +4,7 @@ type ResolvedConfig = {
   url: string;
   key: string;
   urlSource: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_STORYSUPABASE_URL";
+  keySource: "SUPABASE_SERVICE_ROLE_KEY" | "SUPABASE_SECRET_KEY";
 };
 
 type ConfigIssue = {
@@ -27,12 +28,28 @@ export function getProjectRef(url: string): string | undefined {
   }
 }
 
+function resolveServiceKey():
+  | Pick<ResolvedConfig, "key" | "keySource">
+  | { key: undefined } {
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (serviceRole) {
+    return { key: serviceRole, keySource: "SUPABASE_SERVICE_ROLE_KEY" };
+  }
+
+  const secretKey = process.env.SUPABASE_SECRET_KEY?.trim();
+  if (secretKey) {
+    return { key: secretKey, keySource: "SUPABASE_SECRET_KEY" };
+  }
+
+  return { key: undefined };
+}
+
 export function resolveSupabaseConfig():
   | ({ ok: true } & ResolvedConfig)
   | ConfigIssue {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const storyUrl = process.env.NEXT_PUBLIC_STORYSUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const keyConfig = resolveServiceKey();
 
   if (supabaseUrl && storyUrl && supabaseUrl !== storyUrl) {
     return {
@@ -57,21 +74,23 @@ export function resolveSupabaseConfig():
     };
   }
 
-  if (!key) {
+  if (!keyConfig.key) {
     return {
       ok: false,
       reason: "missing_key",
-      message: "SUPABASE_SERVICE_ROLE_KEY를 설정하세요.",
+      message:
+        "SUPABASE_SERVICE_ROLE_KEY(권장) 또는 SUPABASE_SECRET_KEY를 설정하세요.",
     };
   }
 
   return {
     ok: true,
     url,
-    key,
+    key: keyConfig.key,
     urlSource: supabaseUrl
       ? "NEXT_PUBLIC_SUPABASE_URL"
       : "NEXT_PUBLIC_STORYSUPABASE_URL",
+    keySource: keyConfig.keySource,
   };
 }
 
