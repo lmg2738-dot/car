@@ -16,8 +16,9 @@ RUN npm run build
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=50006
 ENV HOSTNAME=0.0.0.0
+# 로컬 기본값. Render 등 PaaS는 런타임에 PORT를 주입합니다.
+ENV PORT=50006
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \

@@ -1,5 +1,8 @@
-# Render Blueprint — https://render.com/docs/blueprint-spec
-# GitHub 연동 후 "New Blueprint" → 이 저장소 선택
+# Render Blueprint (무료 플랜)
+# https://render.com/deploy?repo=https://github.com/lmg2738-dot/car
+#
+# ⚠️ 무료 플랜은 영구 디스크 미지원 → 재시작/재배포 시 data/ 초기화
+#    AI Hub 대용량 다운로드는 서비스 가동 중 /app/data 에 저장됩니다.
 
 services:
   - type: web
@@ -12,21 +15,18 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "50006"
       - key: HOSTNAME
         value: 0.0.0.0
       - key: OPENROUTER_API_KEY
         sync: false
-      - key: NEXT_PUBLIC_APP_URL
+      - key: AIHUB_API_KEY
         sync: false
       - key: ANALYZE_FALLBACK_MOCK
         value: "true"
       - key: OPENROUTER_MAX_MODEL_ATTEMPTS
         value: "2"
-      - key: AIHUB_API_KEY
+      - key: AIHUB_DOWNLOAD_DIR
+        value: /app/data/aihub
+      # 배포 후 Render 대시보드에서 실제 URL로 수정 (예: https://autodealer-copilot.onrender.com)
+      - key: NEXT_PUBLIC_APP_URL
         sync: false
-    disk:
-      name: autodealer-data
-      mountPath: /app/data
-      sizeGB: 1

@@ -53,6 +53,6 @@ npm run dev
 
 ## 배포
 
-**운영(데이터 영구 저장):** [Render Blueprint](./render.yaml) 또는 Docker — [DEPLOYMENT.md](./DEPLOYMENT.md)
+**운영(무료):** [Render Blueprint 배포](https://render.com/deploy?repo=https://github.com/lmg2738-dot/car) — AI Hub 다운로드 지원 ([DEPLOYMENT.md](./DEPLOYMENT.md))
 
 **빠른 데모:** Vercel Import (데이터는 재배포 시 초기화됨)

@@ -22,19 +22,28 @@
 
 ---
 
-## 2. Render 배포 (운영 권장)
+## 2. Render 배포 (무료 Blueprint)
 
-`data/` 폴더 영구 저장이 필요하므로 **Docker + 디스크** 방식을 권장합니다.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/lmg2738-dot/car)
 
-1. [Render](https://render.com) 가입 → GitHub 연동
-2. **New → Blueprint** → `lmg2738-dot/car` 저장소 선택
-3. `render.yaml` 자동 인식 → **Apply**
-4. 환경 변수 입력:
+1. 위 버튼 클릭 → GitHub `lmg2738-dot/car` 연동
+2. Blueprint(`render.yaml`) 확인 → **Apply**
+3. 배포 시 입력할 환경 변수:
    - `OPENROUTER_API_KEY` — OpenRouter 키
-   - `NEXT_PUBLIC_APP_URL` — 배포 후 부여되는 URL (예: `https://autodealer-copilot.onrender.com`)
-5. Deploy 완료 후 URL 접속 → 차량 등록 → 사진 → 분석 테스트
+   - `AIHUB_API_KEY` — AI Hub 키 (다운로드용)
+   - `NEXT_PUBLIC_APP_URL` — 배포 완료 후 URL (예: `https://autodealer-copilot.onrender.com`)
+4. Deploy 완료 후 `/dashboard/datasets`에서 AI Hub 조회·다운로드 테스트
 
-무료 플랜은 유휴 시 슬립되며, 첫 접속 시 30초~1분 걸릴 수 있습니다.
+### 무료 플랜 제한 (중요)
+
+| 항목 | 무료 플랜 |
+|------|-----------|
+| AI Hub **다운로드** | ✅ 서비스 가동 중 가능 (`/app/data/aihub`) |
+| 데이터 **영구 저장** | ❌ 재배포·슬립 후 초기화 (영구 디스크는 유료) |
+| 유휴 슬립 | 15분 미사용 시 슬립 → 첫 접속 30초~1분 |
+| RAM | 512 MB (초대형 데이터셋은 실패할 수 있음) |
+
+> 영구 디스크가 필요하면 Render **Starter** 이상으로 업그레이드 후 Disks 탭에서 `/app/data` 마운트
 
 ---
 

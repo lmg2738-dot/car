@@ -34,6 +34,14 @@ type ChatResult = {
 
 const REQUEST_TIMEOUT_MS = 90_000;
 
+function getAppUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.RENDER_EXTERNAL_URL ??
+    "http://localhost:50006"
+  );
+}
+
 function extractJson(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
@@ -65,7 +73,7 @@ async function callModel(
     headers: {
       Authorization: `Bearer ${getApiKey()}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:50006",
+      "HTTP-Referer": getAppUrl(),
       "X-Title": "AutoDealer Copilot",
     },
     body: JSON.stringify(body),
