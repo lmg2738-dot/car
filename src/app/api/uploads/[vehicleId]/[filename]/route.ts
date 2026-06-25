@@ -1,9 +1,11 @@
 import fs from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
-import { UPLOADS_DIR } from "@/lib/storage/store";
+import { getVehicle, UPLOADS_DIR } from "@/lib/storage/store";
+import { isBlobStorageEnabled } from "@/lib/storage/persistence";
 
 type RouteParams = { params: Promise<{ vehicleId: string; filename: string }> };
+
 const MIME: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -16,6 +18,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
   if (filename.includes("..") || vehicleId.includes("..")) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
+
+  if (isBlobStorageEnabled()) {
+    const vehicle = await getVehicle(vehicleId);
+    const photo = vehicle?.vehicle_photos?.find(
+      (p) => path.basename(p.storage_path) === filename
+    );
+    if (photo?.public_url?.startsWith("http")) {
+      return NextResponse.redirect(photo.public_url, 307);
+    }
   }
 
   const filePath = path.join(UPLOADS_DIR, vehicleId, filename);

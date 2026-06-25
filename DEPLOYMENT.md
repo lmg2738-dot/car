@@ -22,18 +22,23 @@
 
 ---
 
-## 2. Vercel 배포 (빠른 데모)
+## 2. Vercel 배포
 
-Vercel은 **파일 저장소가 영구적이지 않습니다** (재배포·콜드스타트 시 데이터 초기화).
-UI·API 동작 확인용으로 권장합니다. AI Hub **조회**는 가능하나, **대용량 다운로드**는 Docker 배포를 사용하세요.
+Vercel **서버리스** 환경에서는 인스턴스 간 데이터 공유를 위해 **Vercel Blob** 연결이 필요합니다.
 
-1. [Vercel](https://vercel.com) → Import Git Repository → `lmg2738-dot/car`
-2. Environment Variables:
+1. Vercel 프로젝트 → **Storage** → **Create Blob Store** → 프로젝트 연결
+2. [Vercel Import](https://vercel.com/new/import?s=https://github.com/lmg2738-dot/car) 또는 기존 프로젝트 재배포
+3. Environment Variables:
    - `OPENROUTER_API_KEY`
-   - `NEXT_PUBLIC_APP_URL` = Vercel 배포 URL
+   - `NEXT_PUBLIC_APP_URL` = `https://car-theta-three.vercel.app` (본인 URL)
    - `ANALYZE_FALLBACK_MOCK` = `true`
    - `AIHUB_API_KEY` (AI Hub 사용 시)
-3. Deploy
+   - `BLOB_READ_WRITE_TOKEN` — Blob Store 연결 시 자동 주입
+4. Deploy
+
+> Blob 미연결 시 차량 등록 후 **상세 페이지 404**가 발생할 수 있습니다.
+
+UI·API 동작 확인용으로 권장합니다. AI Hub **대용량 다운로드**는 Docker 배포를 사용하세요.
 
 GitHub Actions 자동 배포 (선택):
 

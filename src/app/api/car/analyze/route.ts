@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { NextRequest } from "next/server";
 import {
@@ -15,20 +16,50 @@ import {
   mockAnalyzeVehicle,
 } from "@/lib/openrouter/mock-analysis";
 import {
-  UPLOADS_DIR,
   applyAnalysisResult,
   getVehicle,
+  readPhotoForAnalysis,
   updateVehicle,
 } from "@/lib/storage/store";
+import type { VehiclePhoto } from "@/types/database";
 
 export const maxDuration = 120;
 export const runtime = "nodejs";
 
+type VehicleWithRelations = NonNullable<Awaited<ReturnType<typeof getVehicle>>>;
+
+async function buildPhotoPaths(
+  vehicle_id: string,
+  photos: VehiclePhoto[]
+) {
+  const photoPaths: Array<{
+    filePath: string;
+    mimeType: string;
+    photoId: string;
+  }> = [];
+
+  for (const photo of photos) {
+    const data = await readPhotoForAnalysis(vehicle_id, photo);
+    if (!data) continue;
+
+    const ext = data.mimeType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+    const tmpPath = path.join(os.tmpdir(), `${photo.id}.${ext}`);
+    fs.writeFileSync(tmpPath, data.buffer);
+    photoPaths.push({
+      filePath: tmpPath,
+      mimeType: data.mimeType,
+      photoId: photo.id,
+    });
+  }
+
+  return photoPaths;
+}
+
 async function runAnalyze(
   vehicle_id: string,
-  vehicle: NonNullable<ReturnType<typeof getVehicle>>,
+  vehicle: VehicleWithRelations,
   photoPaths: Array<{ filePath: string; mimeType: string; photoId: string }>,
-  photos: NonNullable<typeof vehicle.vehicle_photos>,
+  photos: VehiclePhoto[],
   options?: { forceMock?: boolean }
 ) {
   const useMock = options?.forceMock || isMockAnalyzeEnabled();
@@ -47,7 +78,7 @@ async function runAnalyze(
     })
     .filter((u): u is NonNullable<typeof u> => u !== null);
 
-  const updated = applyAnalysisResult(vehicle_id, {
+  const updated = await applyAnalysisResult(vehicle_id, {
     condition_summary: analysis.condition_summary,
     price_estimate_min: analysis.market_price.min,
     price_estimate_max: analysis.market_price.max,
@@ -77,7 +108,7 @@ export const POST = withApiRoute(async (request: NextRequest) => {
   }
 
   const { vehicle_id } = parsed.data;
-  const vehicle = getVehicle(vehicle_id);
+  const vehicle = await getVehicle(vehicle_id);
 
   if (!vehicle) {
     return jsonError("Vehicle not found", 404);
@@ -89,29 +120,15 @@ export const POST = withApiRoute(async (request: NextRequest) => {
 
   const photos = vehicle.vehicle_photos ?? [];
 
-  updateVehicle(vehicle_id, { status: "analyzing" });
+  await updateVehicle(vehicle_id, { status: "analyzing" });
 
-  const photoPaths = photos
-    .map((p) => {
-      const filename = path.basename(p.storage_path);
-      const filePath = path.join(UPLOADS_DIR, vehicle_id, filename);
-      if (!fs.existsSync(filePath)) return null;
-      return {
-        filePath,
-        mimeType: p.mime_type ?? "image/jpeg",
-        photoId: p.id,
-      };
-    })
-    .filter(
-      (p): p is { filePath: string; mimeType: string; photoId: string } =>
-        p !== null
-    );
+  const photoPaths = await buildPhotoPaths(vehicle_id, photos);
 
   try {
     const result = await runAnalyze(vehicle_id, vehicle, photoPaths, photos);
     return jsonSuccess(result);
   } catch (err) {
-    updateVehicle(vehicle_id, { status: "draft" });
+    await updateVehicle(vehicle_id, { status: "draft" });
     const message = err instanceof Error ? err.message : "Analysis failed";
     const code = (err as Error & { code?: string }).code;
 
@@ -121,7 +138,7 @@ export const POST = withApiRoute(async (request: NextRequest) => {
       code !== "FREE_QUOTA_EXCEEDED"
     ) {
       try {
-        updateVehicle(vehicle_id, { status: "analyzing" });
+        await updateVehicle(vehicle_id, { status: "analyzing" });
         const fallback = await runAnalyze(
           vehicle_id,
           vehicle,
@@ -137,7 +154,7 @@ export const POST = withApiRoute(async (request: NextRequest) => {
           original_error: message,
         });
       } catch (fallbackErr) {
-        updateVehicle(vehicle_id, { status: "draft" });
+        await updateVehicle(vehicle_id, { status: "draft" });
         console.error("[analyze] fallback failed", fallbackErr);
       }
     }

@@ -7,9 +7,11 @@ import { getVehicle } from "@/lib/storage/store";
 
 type PageProps = { params: Promise<{ id: string }> };
 
+export const dynamic = "force-dynamic";
+
 export default async function ExportPage({ params }: PageProps) {
   const { id } = await params;
-  const vehicle = getVehicle(id);
+  const vehicle = await getVehicle(id);
 
   if (!vehicle) {
     notFound();

@@ -8,8 +8,10 @@ import { VehicleCard } from "@/components/vehicles/vehicle-card";
 import { listVehicles } from "@/lib/storage/store";
 import type { VehicleStatus } from "@/types/database";
 
-export default function DashboardPage() {
-  const vehicles = listVehicles();
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  const vehicles = await listVehicles();
   const readyCount = vehicles.filter((v) => v.status === "ready").length;
   const draftCount = vehicles.filter((v) => v.status === "draft").length;
 

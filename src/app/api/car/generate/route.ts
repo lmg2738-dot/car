@@ -4,17 +4,15 @@ import {
   jsonError,
   jsonSuccess,
   readJsonBody,
+  withApiRoute,
 } from "@/lib/api/helpers";
 import { generateListing } from "@/lib/openrouter/vehicle-ai";
-import {
-  addGeneratedAd,
-  getVehicle,
-} from "@/lib/storage/store";
+import { addGeneratedAd, getVehicle } from "@/lib/storage/store";
 import type { ConditionSummary, MarketPrice } from "@/types/database";
 
 export const maxDuration = 120;
 
-export async function POST(request: NextRequest) {
+export const POST = withApiRoute(async (request: NextRequest) => {
   const body = await readJsonBody(request);
   if (body === null) {
     return jsonError("잘못된 JSON 요청입니다.");
@@ -26,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { vehicle_id, platform, style } = parsed.data;
-  const vehicle = getVehicle(vehicle_id);
+  const vehicle = await getVehicle(vehicle_id);
 
   if (!vehicle) {
     return jsonError("Vehicle not found", 404);
@@ -41,7 +39,8 @@ export async function POST(request: NextRequest) {
     min: vehicle.price_estimate_min ?? 0,
     max: vehicle.price_estimate_max ?? 0,
     median: Math.round(
-      ((vehicle.price_estimate_min ?? 0) + (vehicle.price_estimate_max ?? 0)) / 2
+      ((vehicle.price_estimate_min ?? 0) + (vehicle.price_estimate_max ?? 0)) /
+        2
     ),
     currency: "KRW",
     rationale: "AI 시세 추정 기반",
@@ -56,7 +55,7 @@ export async function POST(request: NextRequest) {
       style
     );
 
-    const ad = addGeneratedAd({
+    const ad = await addGeneratedAd({
       vehicle_id,
       platform,
       style,
@@ -75,4 +74,4 @@ export async function POST(request: NextRequest) {
     const status = code === "FREE_QUOTA_EXCEEDED" ? 429 : 500;
     return jsonError(message, status);
   }
-}
+});

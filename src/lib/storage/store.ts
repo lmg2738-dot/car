@@ -8,19 +8,15 @@ import type {
   VehiclePhoto,
   VehicleStatus,
 } from "@/types/database";
-import { getWritableDataRoot } from "@/lib/runtime";
-
-function getDataDir() {
-  return getWritableDataRoot();
-}
-
-function getStorePath() {
-  return path.join(getDataDir(), "store.json");
-}
-
-function getUploadsRoot() {
-  return path.join(getDataDir(), "uploads");
-}
+import {
+  defaultStore,
+  getUploadsRoot,
+  readPhotoBuffer,
+  readStoreData,
+  savePhotoBytes,
+  isBlobStorageEnabled,
+  writeStoreData,
+} from "./persistence";
 
 export const UPLOADS_DIR = getUploadsRoot();
 
@@ -32,48 +28,28 @@ type StoreData = {
 
 let storeCache: StoreData | null = null;
 
-function defaultStore(): StoreData {
-  return { vehicles: [], vehicle_photos: [], generated_ads: [] };
-}
-
-function ensureDataDir() {
-  const dataDir = getDataDir();
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+async function loadStore(): Promise<StoreData> {
+  if (isBlobStorageEnabled()) {
+    return readStoreData();
   }
-  const uploadsDir = getUploadsRoot();
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-}
-
-function loadStore(): StoreData {
   if (storeCache) return storeCache;
-
-  ensureDataDir();
-  const storePath = getStorePath();
-  if (!fs.existsSync(storePath)) {
-    storeCache = defaultStore();
-    persistStore(storeCache);
-    return storeCache;
-  }
-
-  storeCache = JSON.parse(
-    fs.readFileSync(storePath, "utf-8")
-  ) as StoreData;
+  storeCache = await readStoreData();
   return storeCache;
 }
 
-function persistStore(store: StoreData) {
-  ensureDataDir();
-  fs.writeFileSync(getStorePath(), JSON.stringify(store), "utf-8");
-  storeCache = store;
+async function persistStore(store: StoreData) {
+  await writeStoreData(store);
+  if (!isBlobStorageEnabled()) {
+    storeCache = store;
+  }
 }
 
-function mutateStore(mutator: (store: StoreData) => void): StoreData {
-  const store = loadStore();
+async function mutateStore(
+  mutator: (store: StoreData) => void
+): Promise<StoreData> {
+  const store = await loadStore();
   mutator(store);
-  persistStore(store);
+  await persistStore(store);
   return store;
 }
 
@@ -107,6 +83,10 @@ function attachVehicleRelations(
   };
 }
 
+export function getPhotoPublicUrl(vehicleId: string, filename: string) {
+  return `/api/uploads/${vehicleId}/${filename}`;
+}
+
 export function getUploadsDir(vehicleId: string) {
   const dir = path.join(getUploadsRoot(), vehicleId);
   if (!fs.existsSync(dir)) {
@@ -115,12 +95,8 @@ export function getUploadsDir(vehicleId: string) {
   return dir;
 }
 
-export function getPhotoPublicUrl(vehicleId: string, filename: string) {
-  return `/api/uploads/${vehicleId}/${filename}`;
-}
-
-export function listVehicles() {
-  const store = loadStore();
+export async function listVehicles() {
+  const store = await loadStore();
   const photoMap = groupPhotosByVehicle(store);
 
   return [...store.vehicles]
@@ -134,14 +110,14 @@ export function listVehicles() {
     }));
 }
 
-export function getVehicle(id: string) {
-  const store = loadStore();
+export async function getVehicle(id: string) {
+  const store = await loadStore();
   const vehicle = store.vehicles.find((v) => v.id === id);
   if (!vehicle) return null;
   return attachVehicleRelations(store, vehicle);
 }
 
-export function createVehicle(input: {
+export async function createVehicle(input: {
   brand?: string;
   model: string;
   year: number;
@@ -168,14 +144,14 @@ export function createVehicle(input: {
     updated_at: now,
   };
 
-  mutateStore((store) => {
+  await mutateStore((store) => {
     store.vehicles.push(vehicle);
   });
 
   return vehicle;
 }
 
-export function updateVehicle(
+export async function updateVehicle(
   id: string,
   patch: Partial<
     Pick<
@@ -187,7 +163,7 @@ export function updateVehicle(
     >
   >
 ) {
-  const store = mutateStore((s) => {
+  const store = await mutateStore((s) => {
     const index = s.vehicles.findIndex((v) => v.id === id);
     if (index === -1) return;
 
@@ -203,8 +179,8 @@ export function updateVehicle(
   return attachVehicleRelations(store, vehicle);
 }
 
-export function deleteVehicle(id: string) {
-  mutateStore((store) => {
+export async function deleteVehicle(id: string) {
+  await mutateStore((store) => {
     store.vehicles = store.vehicles.filter((v) => v.id !== id);
     store.vehicle_photos = store.vehicle_photos.filter(
       (p) => p.vehicle_id !== id
@@ -220,20 +196,21 @@ export function deleteVehicle(id: string) {
   }
 }
 
-export function getPhotoCount(vehicleId: string): number | null {
-  const store = loadStore();
+export async function getPhotoCount(vehicleId: string): Promise<number | null> {
+  const store = await loadStore();
   if (!store.vehicles.some((v) => v.id === vehicleId)) return null;
   return store.vehicle_photos.filter((p) => p.vehicle_id === vehicleId).length;
 }
 
-export function addPhotoRecord(
+export async function addPhotoRecord(
   vehicleId: string,
   filename: string,
-  mimeType: string
-): { photo: VehiclePhoto } | { error: "not_found" | "limit" } {
+  mimeType: string,
+  publicUrl: string
+): Promise<{ photo: VehiclePhoto } | { error: "not_found" | "limit" }> {
   let photo: VehiclePhoto | null = null;
 
-  mutateStore((store) => {
+  await mutateStore((store) => {
     const vehicle = store.vehicles.find((v) => v.id === vehicleId);
     if (!vehicle) return;
 
@@ -246,7 +223,7 @@ export function addPhotoRecord(
       id: crypto.randomUUID(),
       vehicle_id: vehicleId,
       storage_path: path.join(vehicleId, filename),
-      public_url: getPhotoPublicUrl(vehicleId, filename),
+      public_url: publicUrl,
       photo_type: "other",
       analysis_result: null,
       sort_order: count,
@@ -257,7 +234,7 @@ export function addPhotoRecord(
   });
 
   if (!photo) {
-    const store = loadStore();
+    const store = await loadStore();
     if (!store.vehicles.some((v) => v.id === vehicleId)) {
       return { error: "not_found" };
     }
@@ -267,7 +244,7 @@ export function addPhotoRecord(
   return { photo };
 }
 
-export function applyAnalysisResult(
+export async function applyAnalysisResult(
   vehicleId: string,
   updates: {
     condition_summary: ConditionSummary;
@@ -277,7 +254,7 @@ export function applyAnalysisResult(
     status: VehicleStatus;
   }
 ) {
-  const store = mutateStore((s) => {
+  const store = await mutateStore((s) => {
     const index = s.vehicles.findIndex((v) => v.id === vehicleId);
     if (index === -1) return;
 
@@ -301,29 +278,43 @@ export function applyAnalysisResult(
   return attachVehicleRelations(store, vehicle);
 }
 
-export function addGeneratedAd(
+export async function addGeneratedAd(
   ad: Omit<GeneratedAd, "id" | "created_at">
-): GeneratedAd {
+): Promise<GeneratedAd> {
   const record: GeneratedAd = {
     id: crypto.randomUUID(),
     created_at: new Date().toISOString(),
     ...ad,
   };
 
-  mutateStore((store) => {
+  await mutateStore((store) => {
     store.generated_ads.push(record);
   });
 
   return record;
 }
 
-export function savePhotoFile(
+export async function savePhotoFile(
   vehicleId: string,
   filename: string,
-  buffer: Buffer
+  buffer: Buffer,
+  mimeType: string
 ) {
-  const dir = getUploadsDir(vehicleId);
-  fs.writeFileSync(path.join(dir, filename), buffer);
+  return savePhotoBytes(vehicleId, filename, buffer, mimeType);
+}
+
+export async function readPhotoForAnalysis(
+  vehicleId: string,
+  photo: VehiclePhoto
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const filename = path.basename(photo.storage_path);
+  const buffer = await readPhotoBuffer(
+    vehicleId,
+    filename,
+    photo.public_url ?? getPhotoPublicUrl(vehicleId, filename)
+  );
+  if (!buffer) return null;
+  return { buffer, mimeType: photo.mime_type ?? "image/jpeg" };
 }
 
 export type { VehicleStatus };

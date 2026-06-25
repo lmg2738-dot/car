@@ -17,9 +17,11 @@ import type { ConditionSummary, VehicleStatus } from "@/types/database";
 
 type PageProps = { params: Promise<{ id: string }> };
 
+export const dynamic = "force-dynamic";
+
 export default async function VehicleDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const vehicle = getVehicle(id);
+  const vehicle = await getVehicle(id);
 
   if (!vehicle) {
     notFound();

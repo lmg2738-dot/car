@@ -18,49 +18,68 @@ const EXT_BY_MIME: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const { id: vehicleId } = await params;
+  try {
+    const { id: vehicleId } = await params;
 
-  const formData = await request.formData();
-  const file = formData.get("file") as File | null;
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
 
-  if (!file) {
-    return jsonError("파일이 필요합니다.");
-  }
+    if (!file) {
+      return jsonError("파일이 필요합니다.");
+    }
 
-  if (!ALLOWED_TYPES.has(file.type)) {
-    return jsonError("허용되지 않는 파일 형식입니다. (JPEG, PNG, WebP)");
-  }
+    if (!ALLOWED_TYPES.has(file.type)) {
+      return jsonError("허용되지 않는 파일 형식입니다. (JPEG, PNG, WebP)");
+    }
 
-  if (file.size > MAX_FILE_SIZE) {
-    return jsonError("파일 크기는 10MB 이하여야 합니다.");
-  }
+    if (file.size > MAX_FILE_SIZE) {
+      return jsonError("파일 크기는 10MB 이하여야 합니다.");
+    }
 
-  const currentCount = getPhotoCount(vehicleId);
-  if (currentCount === null) {
-    return jsonError("Vehicle not found", 404);
-  }
-  if (currentCount >= MAX_PHOTOS) {
-    return jsonError(`최대 ${MAX_PHOTOS}장까지 업로드 가능합니다.`);
-  }
-
-  const extFromName = file.name.split(".").pop()?.toLowerCase();
-  const ext = extFromName && ["jpg", "jpeg", "png", "webp"].includes(extFromName)
-    ? extFromName.replace("jpeg", "jpg")
-    : EXT_BY_MIME[file.type];
-
-  const filename = `${crypto.randomUUID()}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  savePhotoFile(vehicleId, filename, buffer);
-
-  const result = addPhotoRecord(vehicleId, filename, file.type);
-
-  if ("error" in result) {
-    if (result.error === "not_found") {
+    const currentCount = await getPhotoCount(vehicleId);
+    if (currentCount === null) {
       return jsonError("Vehicle not found", 404);
     }
-    return jsonError(`최대 ${MAX_PHOTOS}장까지 업로드 가능합니다.`);
-  }
+    if (currentCount >= MAX_PHOTOS) {
+      return jsonError(`최대 ${MAX_PHOTOS}장까지 업로드 가능합니다.`);
+    }
 
-  return jsonSuccess(result.photo, 201);
+    const extFromName = file.name.split(".").pop()?.toLowerCase();
+    const ext =
+      extFromName && ["jpg", "jpeg", "png", "webp"].includes(extFromName)
+        ? extFromName.replace("jpeg", "jpg")
+        : EXT_BY_MIME[file.type];
+
+    const filename = `${crypto.randomUUID()}.${ext}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    const publicUrl = await savePhotoFile(
+      vehicleId,
+      filename,
+      buffer,
+      file.type
+    );
+
+    const result = await addPhotoRecord(
+      vehicleId,
+      filename,
+      file.type,
+      publicUrl
+    );
+
+    if ("error" in result) {
+      if (result.error === "not_found") {
+        return jsonError("Vehicle not found", 404);
+      }
+      return jsonError(`최대 ${MAX_PHOTOS}장까지 업로드 가능합니다.`);
+    }
+
+    return jsonSuccess(result.photo, 201);
+  } catch (err) {
+    console.error("[API] POST /api/vehicles/[id]/photos", err);
+    return jsonError(
+      err instanceof Error ? err.message : "업로드에 실패했습니다.",
+      500
+    );
+  }
 }

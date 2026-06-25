@@ -9,7 +9,7 @@ import {
 import { createVehicle, listVehicles } from "@/lib/storage/store";
 
 export const GET = withApiRoute(async () => {
-  return jsonSuccess(listVehicles());
+  return jsonSuccess(await listVehicles());
 });
 
 export const POST = withApiRoute(async (request: NextRequest) => {
@@ -23,6 +23,6 @@ export const POST = withApiRoute(async (request: NextRequest) => {
     return jsonError(parsed.error.errors[0]?.message ?? "Invalid input");
   }
 
-  const vehicle = createVehicle(parsed.data);
+  const vehicle = await createVehicle(parsed.data);
   return jsonSuccess(vehicle, 201);
 });
